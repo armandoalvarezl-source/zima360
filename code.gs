@@ -1,0 +1,6945 @@
+const ZIMA = {
+  VERSION: '2.0.0',
+
+  SPREADSHEET_PROPERTY: 'ZIMA_SPREADSHEET_ID',
+
+  SHEET_PLANILLAS: 'PLANILLAS',
+  SHEET_AUDITORIA: 'AUDITORIA',
+  SHEET_CONFIG: 'CONFIG',
+  SHEET_USUARIOS: 'USUARIOS',
+  SHEET_SOPORTE: 'SOPORTE',
+
+  SESSION_PREFIX: 'ZIMA_SESSION_',
+  SESSION_SECONDS: 21600, // 6 horas
+
+  HEADERS: [
+    'id',
+    'codigo',
+    'peaje',
+    'razon',
+    'moneda',
+    'lugarEntrega',
+    'recibe',
+    'ciudad',
+    'lugarRecibo',
+    'fecha',
+    'concepto',
+    'total',
+    'obsValor',
+    'tula',
+    'billetes',
+    'letras',
+    'observaciones',
+    'entregadoNombre',
+    'entregadoFirma',
+    'revisadoNombre',
+    'revisadoFirma',
+    'estado',
+    'usuario',
+    'createdAt',
+    'updatedAt',
+    'tipoPlanilla'
+  ],
+
+  USUARIOS_HEADERS: [
+    'ID',
+    'USUARIO',
+    'CONTRASENA',
+    'NOMBRE',
+    'ROL',
+    'PEAJE',
+    'ESTADO',
+    'FECHA_CREACION',
+    'ULTIMO_INGRESO',
+    'EMAIL',
+    'TELEFONO',
+    'CARGO',
+    'FOTO',
+    'FECHA_CAMBIO_CONTRASENA'
+  ],
+
+  SOPORTE_HEADERS: [
+    'timestamp',
+    'tipo',
+    'titulo',
+    'mensaje',
+    'pagina',
+    'usuario',
+    'nombre',
+    'rol',
+    'peaje',
+    'navegador',
+    'captura',
+    'estado'
+  ]
+};
+
+
+/* ============================================================
+   INICIALIZACIÓN
+   ============================================================ */
+
+function setupSistema() {
+
+  const props = PropertiesService.getScriptProperties();
+
+  let spreadsheetId =
+    props.getProperty(ZIMA.SPREADSHEET_PROPERTY);
+
+  let ss = null;
+
+  if (spreadsheetId) {
+    try {
+      ss = SpreadsheetApp.openById(spreadsheetId);
+    } catch (e) {
+      ss = null;
+      spreadsheetId = null;
+    }
+  }
+
+  if (!ss) {
+    // Si el proyecto está vinculado a una hoja de cálculo,
+    // usamos esa hoja. Si es un proyecto independiente,
+    // creamos una hoja nueva.
+    try {
+      ss = SpreadsheetApp.getActiveSpreadsheet();
+    } catch (e) {
+      ss = null;
+    }
+
+    if (ss) {
+      spreadsheetId = ss.getId();
+    } else {
+      ss = SpreadsheetApp.create(
+        'ZIMA 360 · Gestión de Planillas'
+      );
+      spreadsheetId = ss.getId();
+    }
+
+    props.setProperty(
+      ZIMA.SPREADSHEET_PROPERTY,
+      spreadsheetId
+    );
+  }
+
+  const planillas =
+    prepararHojaPlanillas_(ss);
+
+  const auditoria =
+    prepararHojaAuditoria_(ss);
+
+  const config =
+    prepararHojaConfig_(ss);
+
+  const usuarios =
+    prepararHojaUsuarios_(ss);
+
+  const soporte =
+    prepararHojaSoporte_(ss);
+
+  const configActual =
+    leerConfigMap_(
+      config
+    );
+
+  const configValues = [
+    ['PARAMETRO', 'VALOR'],
+    ['SISTEMA', 'ZIMA 360'],
+    ['VERSION', ZIMA.VERSION],
+    ['SPREADSHEET_ID', spreadsheetId],
+    ['SPREADSHEET_URL', ss.getUrl()],
+    ['HOJA_PLANILLAS', ZIMA.SHEET_PLANILLAS],
+    ['HOJA_AUDITORIA', ZIMA.SHEET_AUDITORIA],
+    ['HOJA_CONFIG', ZIMA.SHEET_CONFIG],
+    ['HOJA_USUARIOS', ZIMA.SHEET_USUARIOS],
+    ['HOJA_SOPORTE', ZIMA.SHEET_SOPORTE],
+    ['WEB_APP_URL', obtenerWebAppUrl_() || ''],
+    [
+      'CORREOS_NOTIFICACION',
+      configActual.CORREOS_NOTIFICACION ||
+      'sistemaplanillaszima@gmail.com'
+    ],
+    ['FECHA_CONFIGURACION', new Date()]
+  ];
+
+  config.clearContents();
+
+  config
+    .getRange(1, 1, configValues.length, 2)
+    .setValues(configValues);
+
+  config
+    .getRange(1, 1, 1, 2)
+    .setFontWeight('bold');
+
+  config.autoResizeColumns(1, 2);
+
+  crearUsuariosIniciales_(ss);
+
+  return {
+    ok: true,
+    message: 'ZIMA 360 configurado correctamente.',
+    spreadsheetId: spreadsheetId,
+    spreadsheetUrl: ss.getUrl(),
+    webAppUrl: obtenerWebAppUrl_() || '',
+    sheets: {
+      planillas: planillas.getName(),
+      auditoria: auditoria.getName(),
+      config: config.getName(),
+      usuarios: usuarios.getName(),
+      soporte: soporte.getName()
+    }
+  };
+}
+
+
+/* ============================================================
+   CONFIGURACIÓN
+   ============================================================ */
+
+function obtenerConfiguracion() {
+
+  const id =
+    PropertiesService
+      .getScriptProperties()
+      .getProperty(
+        ZIMA.SPREADSHEET_PROPERTY
+      );
+
+  if (!id) {
+
+    return {
+      ok: false,
+      error:
+        'El sistema aún no está configurado. Ejecute setupSistema().'
+    };
+  }
+
+  const ss =
+    SpreadsheetApp.openById(id);
+
+  return {
+    ok: true,
+    spreadsheetId: id,
+    spreadsheetUrl: ss.getUrl(),
+    webAppUrl: obtenerWebAppUrl_() || '',
+    version: ZIMA.VERSION
+  };
+}
+
+
+/* ============================================================
+   HOJA PLANILLAS
+   ============================================================ */
+
+function prepararHojaPlanillas_(ss) {
+
+  let sh =
+    ss.getSheetByName(
+      ZIMA.SHEET_PLANILLAS
+    );
+
+  if (!sh) {
+    sh = ss.insertSheet(
+      ZIMA.SHEET_PLANILLAS
+    );
+  }
+
+  if (sh.getLastRow() === 0) {
+
+    sh
+      .getRange(
+        1,
+        1,
+        1,
+        ZIMA.HEADERS.length
+      )
+      .setValues([
+        ZIMA.HEADERS
+      ]);
+
+  } else {
+
+    const current =
+      sh
+        .getRange(
+          1,
+          1,
+          1,
+          Math.max(
+            sh.getLastColumn(),
+            1
+          )
+        )
+        .getValues()[0];
+
+    if (
+      current.filter(String).length === 0
+    ) {
+
+      sh
+        .getRange(
+          1,
+          1,
+          1,
+          ZIMA.HEADERS.length
+        )
+        .setValues([
+          ZIMA.HEADERS
+        ]);
+    }
+  }
+
+  sh.setFrozenRows(1);
+
+  sh
+    .getRange(
+      1,
+      1,
+      1,
+      ZIMA.HEADERS.length
+    )
+    .setFontWeight('bold');
+
+  const totalCol =
+    ZIMA.HEADERS.indexOf('total') + 1;
+
+  const tulaCol =
+    ZIMA.HEADERS.indexOf('tula') + 1;
+
+  const billetesCol =
+    ZIMA.HEADERS.indexOf('billetes') + 1;
+
+  const fechaCol =
+    ZIMA.HEADERS.indexOf('fecha') + 1;
+
+  if (totalCol > 0) {
+
+    sh
+      .getRange(
+        2,
+        totalCol,
+        Math.max(
+          sh.getMaxRows() - 1,
+          1
+        )
+      )
+      .setNumberFormat(
+        '$ #,##0'
+      );
+  }
+
+  if (tulaCol > 0) {
+
+    sh
+      .getRange(
+        2,
+        tulaCol,
+        Math.max(
+          sh.getMaxRows() - 1,
+          1
+        )
+      )
+      .setNumberFormat(
+        '$ #,##0'
+      );
+  }
+
+  if (billetesCol > 0) {
+
+    sh
+      .getRange(
+        2,
+        billetesCol,
+        Math.max(
+          sh.getMaxRows() - 1,
+          1
+        )
+      )
+      .setNumberFormat(
+        '$ #,##0'
+      );
+  }
+
+  if (fechaCol > 0) {
+
+    sh
+      .getRange(
+        2,
+        fechaCol,
+        Math.max(
+          sh.getMaxRows() - 1,
+          1
+        )
+      )
+      .setNumberFormat(
+        'yyyy-mm-dd'
+      );
+  }
+
+  return sh;
+}
+
+
+/* ============================================================
+   HOJA AUDITORÍA
+   ============================================================ */
+
+function prepararHojaAuditoria_(ss) {
+
+  let sh =
+    ss.getSheetByName(
+      ZIMA.SHEET_AUDITORIA
+    );
+
+  if (!sh) {
+    sh = ss.insertSheet(
+      ZIMA.SHEET_AUDITORIA
+    );
+  }
+
+  if (sh.getLastRow() === 0) {
+
+    sh
+      .getRange(
+        1,
+        1,
+        1,
+        7
+      )
+      .setValues([[
+        'timestamp',
+        'accion',
+        'id',
+        'codigo',
+        'usuario',
+        'detalle',
+        'email'
+      ]]);
+
+    sh.setFrozenRows(1);
+
+    sh
+      .getRange(
+        1,
+        1,
+        1,
+        7
+      )
+      .setFontWeight('bold');
+  }
+
+  return sh;
+}
+
+
+/* ============================================================
+   HOJA CONFIG
+   ============================================================ */
+
+function prepararHojaConfig_(ss) {
+
+  let sh =
+    ss.getSheetByName(
+      ZIMA.SHEET_CONFIG
+    );
+
+  if (!sh) {
+    sh = ss.insertSheet(
+      ZIMA.SHEET_CONFIG
+    );
+  }
+
+  return sh;
+}
+
+
+/* ============================================================
+   HOJA USUARIOS
+   ============================================================ */
+
+function prepararHojaUsuarios_(ss) {
+
+  let sh =
+    ss.getSheetByName(
+      ZIMA.SHEET_USUARIOS
+    );
+
+  if (!sh) {
+    sh = ss.insertSheet(
+      ZIMA.SHEET_USUARIOS
+    );
+  }
+
+  if (sh.getLastRow() === 0) {
+
+    sh
+      .getRange(
+        1,
+        1,
+        1,
+        ZIMA.USUARIOS_HEADERS.length
+      )
+      .setValues([
+        ZIMA.USUARIOS_HEADERS
+      ]);
+
+    sh
+      .getRange(
+        1,
+        1,
+        1,
+        ZIMA.USUARIOS_HEADERS.length
+      )
+      .setFontWeight('bold');
+
+    sh.setFrozenRows(1);
+  }
+
+  const currentHeaders =
+    sh
+      .getRange(
+        1,
+        1,
+        1,
+        Math.max(
+          sh.getLastColumn(),
+          1
+        )
+      )
+      .getValues()[0]
+      .map(function(header) {
+        return String(header || '').trim();
+      });
+
+  ZIMA.USUARIOS_HEADERS.forEach(function(header) {
+    if (currentHeaders.indexOf(header) === -1) {
+      sh
+        .getRange(
+          1,
+          sh.getLastColumn() + 1
+        )
+        .setValue(header)
+        .setFontWeight('bold');
+      currentHeaders.push(header);
+    }
+  });
+
+  return sh;
+}
+
+
+function prepararHojaSoporte_(ss) {
+
+  let sh =
+    ss.getSheetByName(
+      ZIMA.SHEET_SOPORTE
+    );
+
+  if (!sh) {
+    sh = ss.insertSheet(
+      ZIMA.SHEET_SOPORTE
+    );
+  }
+
+  if (sh.getLastRow() === 0) {
+    sh
+      .getRange(
+        1,
+        1,
+        1,
+        ZIMA.SOPORTE_HEADERS.length
+      )
+      .setValues([
+        ZIMA.SOPORTE_HEADERS
+      ]);
+
+    sh.setFrozenRows(1);
+
+    sh
+      .getRange(
+        1,
+        1,
+        1,
+        ZIMA.SOPORTE_HEADERS.length
+      )
+      .setFontWeight('bold');
+  }
+
+  return sh;
+}
+
+
+function leerConfigMap_(
+  sh
+) {
+
+  const map = {};
+
+  if (
+    !sh ||
+    sh.getLastRow() < 2
+  ) {
+    return map;
+  }
+
+  const values =
+    sh
+      .getRange(
+        1,
+        1,
+        sh.getLastRow(),
+        Math.max(
+          sh.getLastColumn(),
+          2
+        )
+      )
+      .getValues();
+
+  values.slice(1).forEach(
+    function(row) {
+
+      const key =
+        String(
+          row[0] ||
+          ''
+        )
+          .trim()
+          .toUpperCase();
+
+      if (key) {
+        map[key] =
+          row[1];
+      }
+    }
+  );
+
+  return map;
+}
+
+
+function obtenerValorConfig_(
+  parametro
+) {
+
+  try {
+
+    const ss =
+      getSpreadsheet_();
+
+    const sh =
+      ss.getSheetByName(
+        ZIMA.SHEET_CONFIG
+      );
+
+    const config =
+      leerConfigMap_(
+        sh
+      );
+
+    return String(
+      config[
+        String(
+          parametro ||
+          ''
+        )
+          .trim()
+          .toUpperCase()
+      ] ||
+      ''
+    ).trim();
+
+  } catch (e) {
+
+    return '';
+  }
+}
+
+
+/* ============================================================
+   USUARIOS INICIALES
+   ============================================================ */
+
+function crearUsuariosIniciales_(ss) {
+
+  const sh =
+    prepararHojaUsuarios_(ss);
+
+  const usuarios =
+    obtenerUsuariosDesdeHoja_(sh);
+
+  const iniciales = [
+
+    [
+      Utilities.getUuid(),
+      'admin',
+      hashContrasena_('Admin360'),
+      'Administrador General',
+      'ADMIN',
+      'TODOS',
+      'ACTIVO',
+      new Date(),
+      '',
+      '',
+      '',
+      'Gran Administrador',
+      ''
+    ],
+
+    [
+      Utilities.getUuid(),
+      'interventoria',
+      hashContrasena_('Inter360'),
+      'Interventoría',
+      'INTERVENTORIA',
+      'TODOS',
+      'ACTIVO',
+      new Date(),
+      '',
+      '',
+      '',
+      'Interventoría',
+      ''
+    ]
+
+  ];
+
+  iniciales.forEach(function(usuario) {
+
+    const existe =
+      usuarios.some(function(u) {
+
+        return String(
+          u.USUARIO || ''
+        )
+          .trim()
+          .toLowerCase() ===
+          String(
+            usuario[1] || ''
+          )
+            .trim()
+            .toLowerCase();
+
+      });
+
+    if (!existe) {
+      sh.appendRow(usuario);
+    }
+
+  });
+}
+
+
+/* ============================================================
+   OBTENER USUARIOS
+   ============================================================ */
+
+function obtenerUsuariosDesdeHoja_(sh) {
+
+  if (
+    !sh ||
+    sh.getLastRow() < 2
+  ) {
+    return [];
+  }
+
+  const cantidadColumnas =
+    Math.max(sh.getLastColumn(), ZIMA.USUARIOS_HEADERS.length);
+
+  const datos =
+    sh
+      .getRange(
+        1,
+        1,
+        sh.getLastRow(),
+        cantidadColumnas
+      )
+      .getValues();
+
+  const encabezados =
+    datos.shift();
+
+  return datos
+    .filter(function(fila) {
+
+      return String(
+        fila[1] || ''
+      ).trim() !== '';
+
+    })
+    .map(function(fila) {
+
+      const obj = {};
+
+      encabezados.forEach(
+        function(campo, indice) {
+
+          obj[campo] =
+            fila[indice];
+
+        }
+      );
+
+      return obj;
+    });
+}
+
+
+/* ============================================================
+   AUTENTICACIÓN
+   ============================================================ */
+
+function autenticarUsuario(
+  usuario,
+  password,
+  portal
+) {
+
+  try {
+
+    const ss =
+      getSpreadsheet_();
+
+    const sh =
+      prepararHojaUsuarios_(ss);
+
+    crearUsuariosIniciales_(ss);
+
+    usuario =
+      String(
+        usuario || ''
+      ).trim();
+
+    password =
+      String(
+        password || ''
+      );
+
+    if (
+      !usuario ||
+      !password
+    ) {
+
+      return {
+        ok: false,
+        mensaje:
+          'Ingrese usuario y contraseña.'
+      };
+    }
+
+    const lastRow =
+      sh.getLastRow();
+
+    if (lastRow < 2) {
+
+      return {
+        ok: false,
+        mensaje:
+          'No hay usuarios registrados en la hoja USUARIOS.'
+      };
+    }
+
+    const columnaCambio = obtenerColumnaCambioContrasena_(sh);
+    const datos =
+      sh
+        .getRange(
+          2,
+          1,
+          lastRow - 1,
+          Math.max(sh.getLastColumn(), ZIMA.USUARIOS_HEADERS.length)
+        )
+        .getValues();
+
+    for (
+      let i = 0;
+      i < datos.length;
+      i++
+    ) {
+
+      const fila =
+        datos[i];
+
+      const usuarioBD =
+        String(
+          fila[1] || ''
+        ).trim();
+
+      const passwordBD =
+        String(
+          fila[2] || ''
+        ).trim();
+
+      const nombre =
+        String(
+          fila[3] || ''
+        ).trim();
+
+      const rol =
+        String(
+          fila[4] || ''
+        )
+          .trim()
+          .toUpperCase();
+
+      const peaje =
+        String(
+          fila[5] || ''
+        ).trim();
+
+      const estado =
+        String(
+          fila[6] || ''
+        )
+          .trim()
+          .toUpperCase();
+
+      const email =
+        String(
+          fila[9] || ''
+        ).trim();
+
+      const telefono =
+        String(
+          fila[10] || ''
+        ).trim();
+
+      const cargo =
+        String(
+          fila[11] || ''
+        ).trim();
+
+      const foto =
+        obtenerFotoUsuarioPersistente_(
+          usuarioBD,
+          String(
+            fila[12] || ''
+          ).trim()
+        );
+
+      const usuarioCoincide =
+        usuarioBD.toLowerCase() ===
+        usuario.toLowerCase();
+
+      const passwordCoincide =
+        verificarContrasena_(
+          password,
+          passwordBD
+        );
+
+      if (
+        usuarioCoincide &&
+        passwordCoincide
+      ) {
+
+        // Si el usuario venía de una versión anterior
+        // con contraseña en texto plano, la migramos
+        // automáticamente al primer inicio de sesión.
+        if (
+          passwordCoincide &&
+          !esHashContrasena_(passwordBD)
+        ) {
+          sh
+            .getRange(i + 2, 3)
+            .setValue(
+              hashContrasena_(password)
+            );
+        }
+
+        if (
+          estado !==
+          'ACTIVO'
+        ) {
+
+          notificarSeguimientoAcceso_({
+            usuario: usuarioBD,
+            nombre: nombre,
+            rol: rol,
+            peaje: peaje,
+            estado: estado,
+            evento: 'ACCESO_INACTIVO',
+            detalle: 'Se intentó iniciar sesión con una cuenta inactiva.'
+          });
+
+          return {
+            ok: false,
+            mensaje:
+              'El usuario "' +
+              usuarioBD +
+              '" se encuentra INACTIVO.'
+          };
+        }
+
+        if (String(portal || '').toLowerCase() === 'soporte' &&
+            ['SOPORTE', 'ADMIN', 'ADMINISTRADOR'].indexOf(rol) === -1) {
+          return {ok: false, mensaje: 'Este acceso es exclusivo de Soporte y administradores. Use el ingreso general de ZIMA 360.'};
+        }
+
+        const politica = estadoContrasena_({
+          FECHA_CREACION: fila[7],
+          FECHA_CAMBIO_CONTRASENA: fila[columnaCambio - 1]
+        });
+        if (politica.requiereCambioContrasena) {
+          notificarSeguimientoAcceso_({
+            usuario: usuarioBD,
+            nombre: nombre,
+            rol: rol,
+            peaje: peaje,
+            estado: estado,
+            evento: 'CAMBIO_PENDIENTE',
+            venceContrasena: politica.venceContrasena,
+            detalle: 'El inicio de sesión requiere renovar la contraseña.'
+          });
+          return Object.assign({
+            ok: false,
+            codigo: 'CAMBIO_CONTRASENA_REQUERIDO',
+            usuario: usuarioBD,
+            mensaje: politica.cambioGlobalObligatorio
+              ? 'Debe cambiar su contrase\u00f1a. El cambio es obligatorio desde el 20 de noviembre de 2026.'
+              : 'Debe cambiar su contrase\u00f1a: su vigencia es de tres meses.'
+          }, politica);
+        }
+
+        sh
+          .getRange(
+            i + 2,
+            9
+          )
+          .setValue(
+            new Date()
+          );
+
+        const usuarioSesion = {
+          usuario:
+            usuarioBD,
+
+          nombre:
+            nombre ||
+            usuarioBD,
+
+          rol:
+            rol ||
+            'PEAJE',
+
+          peaje:
+            peaje ||
+            'TODOS',
+
+          estado:
+            estado,
+
+          email:
+            email,
+
+          telefono:
+            telefono,
+
+          cargo:
+            cargo,
+
+          foto:
+            foto,
+
+          loginAt:
+            new Date().toISOString()
+        };
+
+        const token =
+          crearSesion_(
+            usuarioSesion
+          );
+
+        registrarIngresoPeaje_(usuarioSesion);
+        notificarIngresoPlataforma_(
+          usuarioSesion
+        );
+
+        return {
+
+          ok: true,
+
+          token:
+            token,
+
+          sessionToken:
+            token,
+
+          sesion:
+            token,
+
+          usuario:
+            usuarioBD,
+
+          nombre:
+            nombre ||
+            usuarioBD,
+
+          rol:
+            rol ||
+            'PEAJE',
+
+          peaje:
+            peaje ||
+            'TODOS',
+
+          estado:
+            estado,
+
+          email:
+            email,
+
+          telefono:
+            telefono,
+
+          cargo:
+            cargo,
+
+          foto:
+            foto,
+
+          usuarioData: {
+            usuario:
+              usuarioBD,
+
+            nombre:
+              nombre ||
+              usuarioBD,
+
+            rol:
+              rol ||
+              'PEAJE',
+
+            peaje:
+              peaje ||
+              'TODOS',
+
+            estado:
+              estado,
+
+            email:
+              email,
+
+            telefono:
+              telefono,
+
+            cargo:
+              cargo,
+
+            foto:
+              foto
+          },
+
+          mensaje:
+            'Inicio de sesión correcto.'
+        };
+      }
+    }
+
+    return {
+      ok: false,
+      mensaje:
+        'Usuario o contraseña incorrectos.'
+    };
+
+  } catch (error) {
+
+    console.error(error);
+
+    return {
+      ok: false,
+      mensaje:
+        'No fue posible validar el usuario: ' +
+        errorMessage_(error)
+    };
+  }
+}
+
+
+/* ============================================================
+   SESIONES
+   ============================================================ */
+
+function crearSesion_(usuarioSesion) {
+
+  const token =
+    Utilities.getUuid() +
+    '-' +
+    Utilities.getUuid();
+
+  const cache =
+    CacheService.getScriptCache();
+
+  cache.put(
+    ZIMA.SESSION_PREFIX + token,
+    JSON.stringify(
+      usuarioSesion
+    ),
+    ZIMA.SESSION_SECONDS
+  );
+
+  return token;
+}
+
+
+function obtenerSesion_(token) {
+
+  token =
+    String(
+      token || ''
+    ).trim();
+
+  if (!token) {
+    return null;
+  }
+
+  const cache =
+    CacheService.getScriptCache();
+
+  const raw =
+    cache.get(
+      ZIMA.SESSION_PREFIX + token
+    );
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+
+    return JSON.parse(raw);
+
+  } catch (e) {
+
+    return null;
+  }
+}
+
+
+function cerrarSesion_(token) {
+
+  token =
+    String(
+      token || ''
+    ).trim();
+
+  if (!token) {
+    return {
+      ok: true
+    };
+  }
+
+  CacheService
+    .getScriptCache()
+    .remove(
+      ZIMA.SESSION_PREFIX + token
+    );
+
+  return {
+    ok: true,
+    mensaje:
+      'Sesión cerrada correctamente.'
+  };
+}
+
+
+/* ============================================================
+   CONTEXTO DEL USUARIO
+   ============================================================ */
+
+function obtenerContextoUsuario_(data) {
+
+  data = data || {};
+
+  const token =
+    String(
+      data.token ||
+      data.sessionToken ||
+      data.sesion ||
+      ''
+    ).trim();
+
+  if (!token) {
+    return {
+      ok: false,
+      error:
+        'Sesión requerida. Inicie sesión nuevamente.'
+    };
+  }
+
+  const sesion =
+    obtenerSesion_(token);
+
+  if (!sesion) {
+    return {
+      ok: false,
+      error:
+        'La sesión ha expirado o no es válida. Inicie sesión nuevamente.'
+    };
+  }
+
+  const usuarioActual = buscarUsuario_(sesion.usuario);
+  if (!usuarioActual || String(usuarioActual.ESTADO).trim().toUpperCase() !== 'ACTIVO') {
+    return { ok: false, error: 'Usuario inactivo o no disponible.' };
+  }
+  if (estadoContrasena_(usuarioActual).requiereCambioContrasena) {
+    return {
+      ok: false,
+      codigo: 'CAMBIO_CONTRASENA_REQUERIDO',
+      requiereCambioContrasena: true,
+      error: 'Debe cambiar su contraseña. Inicie sesión nuevamente.'
+    };
+  }
+  const ultimoCambio = new Date(usuarioActual.FECHA_CAMBIO_CONTRASENA).getTime();
+  if (ultimoCambio && (!sesion.loginAt || new Date(sesion.loginAt).getTime() < ultimoCambio)) {
+    return { ok: false, error: 'La contraseña cambió. Inicie sesión nuevamente.' };
+  }
+
+  return {
+    ok: true,
+    sesion: Object.assign({}, sesion, {rol: usuarioActual.ROL || sesion.rol, peaje: usuarioActual.PEAJE || sesion.peaje, nombre: usuarioActual.NOMBRE || sesion.nombre})
+  };
+}
+
+/* ============================================================
+   BUSCAR USUARIO
+   ============================================================ */
+
+function buscarUsuario_(usuario) {
+
+  const ss =
+    getSpreadsheet_();
+
+  const sh =
+    prepararHojaUsuarios_(ss);
+
+  const usuarios =
+    obtenerUsuariosDesdeHoja_(sh);
+
+  usuario =
+    String(
+      usuario || ''
+    )
+      .trim()
+      .toLowerCase();
+
+  for (
+    let i = 0;
+    i < usuarios.length;
+    i++
+  ) {
+
+    const u =
+      usuarios[i];
+
+    if (
+      String(
+        u.USUARIO || ''
+      )
+        .trim()
+        .toLowerCase() ===
+      usuario
+    ) {
+
+      return u;
+    }
+  }
+
+  return null;
+}
+
+
+/* ============================================================
+   CREAR USUARIO
+   ============================================================ */
+
+function crearUsuarioInterno_(datos) {
+
+  const ss =
+    getSpreadsheet_();
+
+  const sh =
+    prepararHojaUsuarios_(ss);
+
+  const usuario =
+    String(
+      datos &&
+      datos.usuario ||
+      ''
+    ).trim();
+
+  const password =
+    String(
+      datos &&
+      (
+        datos.password ||
+        datos.contrasena
+      ) ||
+      ''
+    );
+
+  const nombre =
+    String(
+      datos &&
+      datos.nombre ||
+      ''
+    ).trim();
+
+  const rol =
+    String(
+      datos &&
+      datos.rol ||
+      'PEAJE'
+    )
+      .trim()
+      .toUpperCase();
+
+  const peaje =
+    String(
+      datos &&
+      datos.peaje ||
+      ''
+    ).trim();
+
+  if (!usuario) {
+    throw new Error(
+      'El usuario es obligatorio.'
+    );
+  }
+
+  if (!password) {
+    throw new Error(
+      'La contraseña es obligatoria.'
+    );
+  }
+
+  if (!nombre) {
+    throw new Error(
+      'El nombre es obligatorio.'
+    );
+  }
+
+  if (
+    rol !== 'ADMIN' &&
+    rol !== 'ADMINISTRADOR' &&
+    rol !== 'INTERVENTORIA' &&
+    rol !== 'SOPORTE' &&
+    rol !== 'PEAJE'
+  ) {
+    throw new Error(
+      'Rol no válido.'
+    );
+  }
+
+  if (
+    rol === 'PEAJE' &&
+    !peaje
+  ) {
+    throw new Error(
+      'Debe indicar el peaje del usuario.'
+    );
+  }
+
+  crearUsuariosIniciales_(ss);
+
+  const usuarios =
+    obtenerUsuariosDesdeHoja_(sh);
+
+  const existe =
+    usuarios.some(function(u) {
+
+      return String(
+        u.USUARIO || ''
+      )
+        .trim()
+        .toLowerCase() ===
+      usuario.toLowerCase();
+
+    });
+
+  if (existe) {
+
+    throw new Error(
+      'Ese usuario ya existe.'
+    );
+  }
+
+  const fotoUsuario =
+    String(datos.foto || '').trim();
+
+  guardarFotoUsuarioPersistente_(
+    usuario,
+    fotoUsuario
+  );
+
+  sh.appendRow([
+
+    Utilities.getUuid(),
+
+    usuario,
+
+    hashContrasena_(password),
+
+    nombre,
+
+    rol,
+
+    peaje ||
+      'TODOS',
+
+    'ACTIVO',
+
+    new Date(),
+
+    '',
+
+    String(datos.email || '').trim(),
+
+    String(datos.telefono || '').trim(),
+
+    String(datos.cargo || '').trim(),
+
+    fotoUsuario
+
+  ]);
+  sh.getRange(sh.getLastRow(), obtenerColumnaCambioContrasena_(sh)).setValue(new Date());
+
+  return {
+    ok: true,
+    mensaje:
+      'Usuario creado correctamente.',
+    usuario:
+      usuario,
+    nombre:
+      nombre,
+    rol:
+      rol,
+    peaje:
+      peaje ||
+      'TODOS',
+    email:
+      String(datos.email || '').trim(),
+    telefono:
+      String(datos.telefono || '').trim(),
+    cargo:
+      String(datos.cargo || '').trim(),
+    foto:
+      fotoUsuario
+  };
+}
+
+
+function actualizarUsuarioInterno_(datos) {
+
+  const ss =
+    getSpreadsheet_();
+
+  const sh =
+    prepararHojaUsuarios_(ss);
+
+  datos =
+    datos || {};
+
+  const usuario =
+    String(
+      datos.usuario ||
+      ''
+    ).trim();
+
+  if (!usuario) {
+    throw new Error(
+      'El usuario es obligatorio.'
+    );
+  }
+
+  const nombre =
+    String(
+      datos.nombre ||
+      ''
+    ).trim();
+
+  const rol =
+    String(
+      datos.rol ||
+      ''
+    )
+      .trim()
+      .toUpperCase();
+
+  const peaje =
+    String(
+      datos.peaje ||
+      ''
+    ).trim();
+
+  const estado =
+    String(
+      datos.estado ||
+      'ACTIVO'
+    )
+      .trim()
+      .toUpperCase();
+
+  if (!nombre) {
+    throw new Error(
+      'El nombre es obligatorio.'
+    );
+  }
+
+  if (
+    rol !== 'ADMIN' &&
+    rol !== 'ADMINISTRADOR' &&
+    rol !== 'INTERVENTORIA' &&
+    rol !== 'SOPORTE' &&
+    rol !== 'PEAJE'
+  ) {
+    throw new Error(
+      'Rol no válido.'
+    );
+  }
+
+  if (
+    estado !== 'ACTIVO' &&
+    estado !== 'INACTIVO'
+  ) {
+    throw new Error(
+      'Estado no válido.'
+    );
+  }
+
+  if (
+    rol === 'PEAJE' &&
+    !peaje
+  ) {
+    throw new Error(
+      'Debe indicar el peaje del usuario.'
+    );
+  }
+
+  const headers =
+    sh
+      .getRange(
+        1,
+        1,
+        1,
+        sh.getLastColumn()
+      )
+      .getValues()[0]
+      .map(function(header) {
+        return String(header || '').trim();
+      });
+
+  const col = function(name) {
+    const index =
+      headers.indexOf(name);
+
+    if (index === -1) {
+      throw new Error(
+        'Columna de usuario no configurada: ' +
+        name
+      );
+    }
+
+    return index + 1;
+  };
+
+  const datosHoja =
+    sh.getDataRange()
+      .getValues();
+
+  for (let i = 1; i < datosHoja.length; i++) {
+    if (
+      String(datosHoja[i][col('USUARIO') - 1] || '').trim().toLowerCase() ===
+      usuario.toLowerCase()
+    ) {
+      const row =
+        i + 1;
+
+      sh.getRange(row, col('NOMBRE')).setValue(nombre);
+      sh.getRange(row, col('ROL')).setValue(rol);
+      sh.getRange(row, col('PEAJE')).setValue(peaje || 'TODOS');
+      sh.getRange(row, col('ESTADO')).setValue(estado);
+      sh.getRange(row, col('EMAIL')).setValue(String(datos.email || '').trim());
+      sh.getRange(row, col('TELEFONO')).setValue(String(datos.telefono || '').trim());
+      sh.getRange(row, col('CARGO')).setValue(String(datos.cargo || '').trim());
+      const fotoUsuario =
+        String(datos.foto || '').trim();
+
+      sh.getRange(row, col('FOTO')).setValue(fotoUsuario);
+
+      guardarFotoUsuarioPersistente_(
+        usuario,
+        fotoUsuario
+      );
+
+      const nuevaContrasena =
+        String(
+          datos.nuevaContrasena ||
+          datos.password ||
+          ''
+        );
+
+      if (nuevaContrasena) {
+        if (nuevaContrasena.length < 6) {
+          throw new Error(
+            'La contraseña debe tener al menos 6 caracteres.'
+          );
+        }
+
+        sh.getRange(row, col('CONTRASENA'))
+          .setValue(
+            hashContrasena_(nuevaContrasena)
+          );
+        sh.getRange(row, col('FECHA_CAMBIO_CONTRASENA')).setValue(new Date());
+      }
+
+      const perfilActualizado = {
+        ok: true,
+        mensaje:
+          'Perfil actualizado correctamente.',
+        usuario:
+          usuario,
+        nombre:
+          nombre,
+        rol:
+          rol,
+        peaje:
+          peaje ||
+          'TODOS',
+        estado:
+          estado,
+        email:
+          String(datos.email || '').trim(),
+        telefono:
+          String(datos.telefono || '').trim(),
+        cargo:
+          String(datos.cargo || '').trim(),
+        foto:
+          fotoUsuario
+      };
+
+      actualizarSesionCacheSiCorresponde_(
+        datos,
+        perfilActualizado
+      );
+
+      return perfilActualizado;
+    }
+  }
+
+  throw new Error(
+    'Usuario no encontrado.'
+  );
+}
+
+
+function actualizarPerfilPropio_(datos) {
+
+  datos =
+    datos || {};
+
+  const contexto =
+    obtenerContextoUsuario_(
+      datos
+    );
+
+  if (!contexto.ok) {
+    return contexto;
+  }
+
+  const sesion =
+    contexto.sesion;
+
+  const ss =
+    getSpreadsheet_();
+
+  const sh =
+    prepararHojaUsuarios_(ss);
+
+  const headers =
+    sh
+      .getRange(
+        1,
+        1,
+        1,
+        sh.getLastColumn()
+      )
+      .getValues()[0]
+      .map(function(header) {
+        return String(header || '').trim();
+      });
+
+  const col = function(name) {
+    const index =
+      headers.indexOf(name);
+
+    if (index === -1) {
+      throw new Error(
+        'Columna de usuario no configurada: ' +
+        name
+      );
+    }
+
+    return index + 1;
+  };
+
+  const datosHoja =
+    sh.getDataRange()
+      .getValues();
+
+  const usuarioSesion =
+    String(
+      sesion.usuario ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+  for (let i = 1; i < datosHoja.length; i++) {
+
+    if (
+      String(
+        datosHoja[i][col('USUARIO') - 1] ||
+        ''
+      )
+        .trim()
+        .toLowerCase() !==
+      usuarioSesion
+    ) {
+      continue;
+    }
+
+    const row =
+      i + 1;
+
+    const nombre =
+      String(
+        datos.nombre ||
+        datosHoja[i][col('NOMBRE') - 1] ||
+        sesion.nombre ||
+        sesion.usuario ||
+        ''
+      ).trim();
+
+    if (!nombre) {
+      throw new Error(
+        'El nombre es obligatorio.'
+      );
+    }
+
+    const email =
+      String(
+        datos.email ||
+        ''
+      ).trim();
+
+    const telefono =
+      String(
+        datos.telefono ||
+        ''
+      ).trim();
+
+    const cargo =
+      String(
+        datos.cargo ||
+        ''
+      ).trim();
+
+    const fotoUsuario =
+      String(
+        datos.foto ||
+        ''
+      ).trim();
+
+    sh.getRange(row, col('NOMBRE')).setValue(nombre);
+    sh.getRange(row, col('EMAIL')).setValue(email);
+    sh.getRange(row, col('TELEFONO')).setValue(telefono);
+    sh.getRange(row, col('CARGO')).setValue(cargo);
+    sh.getRange(row, col('FOTO')).setValue(fotoUsuario);
+
+    guardarFotoUsuarioPersistente_(
+      sesion.usuario,
+      fotoUsuario
+    );
+
+    const perfilActualizado = {
+      ok: true,
+      mensaje:
+        'Datos guardados correctamente.',
+      usuario:
+        sesion.usuario,
+      nombre:
+        nombre,
+      rol:
+        datosHoja[i][col('ROL') - 1] ||
+        sesion.rol ||
+        '',
+      peaje:
+        datosHoja[i][col('PEAJE') - 1] ||
+        sesion.peaje ||
+        '',
+      estado:
+        datosHoja[i][col('ESTADO') - 1] ||
+        sesion.estado ||
+        '',
+      email:
+        email,
+      telefono:
+        telefono,
+      cargo:
+        cargo,
+      foto:
+        fotoUsuario
+    };
+
+    actualizarSesionCacheSiCorresponde_(
+      datos,
+      perfilActualizado
+    );
+
+    return perfilActualizado;
+  }
+
+  throw new Error(
+    'Usuario no encontrado.'
+  );
+}
+
+
+function fotoKeyUsuario_(
+  usuario
+) {
+
+  return 'ZIMA_FOTO_' +
+    String(usuario || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_.-]/g, '_');
+}
+
+
+function guardarFotoUsuarioPersistente_(
+  usuario,
+  foto
+) {
+
+  const key =
+    fotoKeyUsuario_(
+      usuario
+    );
+
+  foto =
+    String(
+      foto || ''
+    ).trim();
+
+  try {
+
+    const props =
+      PropertiesService
+        .getScriptProperties();
+
+    if (foto) {
+      props.setProperty(
+        key,
+        foto
+      );
+    } else {
+      props.deleteProperty(
+        key
+      );
+    }
+
+  } catch (e) {}
+}
+
+
+function obtenerFotoUsuarioPersistente_(
+  usuario,
+  fotoHoja
+) {
+
+  fotoHoja =
+    String(
+      fotoHoja || ''
+    ).trim();
+
+  if (fotoHoja) {
+    return fotoHoja;
+  }
+
+  try {
+
+    return String(
+      PropertiesService
+        .getScriptProperties()
+        .getProperty(
+          fotoKeyUsuario_(
+            usuario
+          )
+        ) ||
+        ''
+    ).trim();
+
+  } catch (e) {
+
+    return '';
+  }
+}
+
+
+function actualizarSesionCacheSiCorresponde_(
+  datos,
+  perfil
+) {
+
+  const token =
+    String(
+      datos.token ||
+      datos.sessionToken ||
+      datos.sesion ||
+      ''
+    ).trim();
+
+  if (!token) {
+    return;
+  }
+
+  const sesionActual =
+    obtenerSesion_(
+      token
+    );
+
+  if (
+    !sesionActual ||
+    String(sesionActual.usuario || '').trim().toLowerCase() !==
+      String(perfil.usuario || '').trim().toLowerCase()
+  ) {
+    return;
+  }
+
+  const sesionNueva =
+    Object.assign(
+      {},
+      sesionActual,
+      {
+        usuario:
+          perfil.usuario,
+        nombre:
+          perfil.nombre,
+        rol:
+          perfil.rol,
+        peaje:
+          perfil.peaje,
+        estado:
+          perfil.estado,
+        email:
+          perfil.email || '',
+        telefono:
+          perfil.telefono || '',
+        cargo:
+          perfil.cargo || '',
+        foto:
+          perfil.foto || ''
+      }
+    );
+
+  CacheService
+    .getScriptCache()
+    .put(
+      ZIMA.SESSION_PREFIX + token,
+      JSON.stringify(sesionNueva),
+      ZIMA.SESSION_SECONDS
+    );
+}
+
+
+function obtenerPerfilUsuario_(params) {
+
+  const contexto =
+    obtenerContextoUsuario_(
+      params
+    );
+
+  if (!contexto.ok) {
+    return contexto;
+  }
+
+  const sesion =
+    contexto.sesion;
+
+  const usuarioHoja =
+    buscarUsuario_(
+      sesion.usuario
+    );
+
+  if (!usuarioHoja) {
+    return {
+      ok: false,
+      error:
+        'Usuario no encontrado.'
+    };
+  }
+
+  return {
+    ok: true,
+    usuario:
+      usuarioHoja.USUARIO ||
+      sesion.usuario,
+    nombre:
+      usuarioHoja.NOMBRE ||
+      sesion.nombre ||
+      usuarioHoja.USUARIO ||
+      '',
+    rol:
+      usuarioHoja.ROL ||
+      sesion.rol ||
+      '',
+    peaje:
+      usuarioHoja.PEAJE ||
+      sesion.peaje ||
+      '',
+    estado:
+      usuarioHoja.ESTADO ||
+      sesion.estado ||
+      '',
+    email:
+      usuarioHoja.EMAIL ||
+      '',
+    telefono:
+      usuarioHoja.TELEFONO ||
+      '',
+    cargo:
+      usuarioHoja.CARGO ||
+      '',
+    foto:
+      obtenerFotoUsuarioPersistente_(
+        usuarioHoja.USUARIO ||
+        sesion.usuario,
+        usuarioHoja.FOTO ||
+        ''
+      )
+  };
+}
+
+
+// La columna puede estar después de otras columnas añadidas a USUARIOS.
+function obtenerColumnaCambioContrasena_(sh) {
+  const encabezados = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  const indice = encabezados.map(function(valor) {
+    return String(valor || '').trim();
+  }).indexOf('FECHA_CAMBIO_CONTRASENA');
+  if (indice < 0) throw new Error('No se encontró la fecha de cambio de contraseña.');
+  return indice + 1;
+}
+
+// Vence cada tres meses y fuerza una renovación global desde el 20-11-2026.
+function estadoContrasena_(usuario, ahora) {
+  const valor = usuario.FECHA_CAMBIO_CONTRASENA || usuario.FECHA_CREACION;
+  const fecha = valor ? new Date(valor) : new Date(NaN);
+  const hoy = ahora || new Date();
+  // Medianoche del 20 de noviembre en America/Bogota (UTC-5).
+  const fechaCambioGlobal = new Date(Date.UTC(2026, 10, 20, 5, 0, 0));
+  // El cambio global se exige una sola vez. Una renovación hecha desde esa fecha
+  // habilita el acceso hasta que vuelva a vencer la vigencia trimestral.
+  if (hoy >= fechaCambioGlobal &&
+      (isNaN(fecha.getTime()) || fecha < fechaCambioGlobal)) {
+    return {
+      requiereCambioContrasena: true,
+      venceContrasena: fechaCambioGlobal.toISOString(),
+      cambioGlobalObligatorio: true
+    };
+  }
+  if (isNaN(fecha.getTime()) || fecha > hoy) {
+    return { requiereCambioContrasena: true, venceContrasena: '' };
+  }
+  const vencimiento = new Date(fecha.getTime());
+  const dia = vencimiento.getUTCDate();
+  vencimiento.setUTCDate(1);
+  vencimiento.setUTCMonth(vencimiento.getUTCMonth() + 3);
+  const ultimoDia = new Date(Date.UTC(vencimiento.getUTCFullYear(), vencimiento.getUTCMonth() + 1, 0)).getUTCDate();
+  vencimiento.setUTCDate(Math.min(dia, ultimoDia));
+  return {
+    requiereCambioContrasena: hoy >= vencimiento,
+    venceContrasena: vencimiento.toISOString()
+  };
+}
+
+// Renueva la contraseña sin conceder una sesión con credenciales vencidas.
+function renovarContrasena_(datos) {
+  const usuario = String(datos.usuario || '').trim().toLowerCase();
+  const actual = String(datos.passwordActual || '');
+  const nueva = String(datos.nuevaContrasena || '');
+  if (!usuario || !actual) throw new Error('Ingrese usuario y contraseña actual.');
+  if (nueva.trim().length < 6) throw new Error('La nueva contraseña debe tener al menos 6 caracteres.');
+  if (nueva !== String(datos.confirmarContrasena || '')) throw new Error('Las contraseñas no coinciden.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = prepararHojaUsuarios_(getSpreadsheet_());
+    const filas = sh.getDataRange().getValues();
+    const columna = obtenerColumnaCambioContrasena_(sh);
+    for (let i = 1; i < filas.length; i++) {
+      if (String(filas[i][1] || '').trim().toLowerCase() !== usuario) continue;
+      if (String(filas[i][6]).trim().toUpperCase() !== 'ACTIVO' || !verificarContrasena_(actual, String(filas[i][2] || ''))) {
+        throw new Error('Usuario o contraseña actual incorrectos.');
+      }
+      if (verificarContrasena_(nueva, String(filas[i][2] || ''))) {
+        throw new Error('La nueva contraseña debe ser diferente de la actual.');
+      }
+      sh.getRange(i + 1, 3).setValue(hashContrasena_(nueva));
+      sh.getRange(i + 1, columna).setValue(new Date());
+      SpreadsheetApp.flush();
+      return { ok: true, mensaje: 'Contraseña guardada correctamente. Inicie sesión con la nueva contraseña.' };
+    }
+    throw new Error('Usuario o contraseña actual incorrectos.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function cambiarContrasenaUsuarioInterno_(
+  usuario,
+  nuevaContrasena
+) {
+
+  usuario =
+    String(usuario || '').trim();
+
+  nuevaContrasena =
+    String(nuevaContrasena || '');
+
+  if (!usuario || !nuevaContrasena) {
+    throw new Error(
+      'Usuario y nueva contraseña son obligatorios.'
+    );
+  }
+
+  if (nuevaContrasena.length < 6) {
+    throw new Error(
+      'La contraseña debe tener al menos 6 caracteres.'
+    );
+  }
+
+  const ss = getSpreadsheet_();
+  const sh = prepararHojaUsuarios_(ss);
+  const datos = sh.getDataRange().getValues();
+
+  for (let i = 1; i < datos.length; i++) {
+    if (
+      String(datos[i][1] || '').trim().toLowerCase() ===
+      usuario.toLowerCase()
+    ) {
+      sh.getRange(i + 1, 3)
+        .setValue(hashContrasena_(nuevaContrasena));
+      sh.getRange(i + 1, obtenerColumnaCambioContrasena_(sh))
+        .setValue(new Date());
+
+      return {
+        ok: true,
+        mensaje: 'Contraseña actualizada correctamente.'
+      };
+    }
+  }
+
+  throw new Error('Usuario no encontrado.');
+}
+
+
+/* ============================================================
+   LISTAR USUARIOS
+   ============================================================ */
+
+function listarUsuariosInterno_() {
+
+  const ss =
+    getSpreadsheet_();
+
+  const sh =
+    prepararHojaUsuarios_(ss);
+
+  crearUsuariosIniciales_(ss);
+
+  return obtenerUsuariosDesdeHoja_(sh)
+    .map(function(u) {
+      const copia = Object.assign({}, u);
+      delete copia.CONTRASENA;
+      return copia;
+    });
+}
+
+
+/* ============================================================
+   LISTAR PEAJES
+   ============================================================ */
+
+function listarPeajes_(params) {
+
+  params =
+    params || {};
+
+  const contexto =
+    obtenerContextoUsuario_(
+      params
+    );
+
+  if (!contexto.ok) {
+    return contexto;
+  }
+
+  const sesion =
+    contexto.sesion;
+
+  const mapa = {};
+
+  const agregar = function(value) {
+
+    const nombre =
+      String(
+        value || ''
+      ).trim();
+
+    const key =
+      normalizarPeaje_(
+        nombre
+      );
+
+    if (
+      !key ||
+      key === 'TODOS' ||
+      key === 'ADMINISTRACION CENTRAL' ||
+      key === 'ADMINISTRACIÓN CENTRAL'
+    ) {
+      return;
+    }
+
+    if (!mapa[key]) {
+      mapa[key] =
+        nombre;
+    }
+  };
+
+  let planillas = [];
+
+  try {
+    planillas =
+      readAllRows_(
+        getPlanillasSheet_()
+      );
+  } catch (e) {
+    planillas = [];
+  }
+
+  if (
+    !esUsuarioGlobal_(
+      sesion
+    ) && !esUsuarioSoporte_(sesion)
+  ) {
+
+    const peajeSesion =
+      normalizarPeaje_(
+        sesion.peaje
+      );
+
+    planillas =
+      planillas.filter(
+        function(row) {
+          return normalizarPeaje_(
+            row.peaje
+          ) === peajeSesion;
+        }
+      );
+  }
+
+  planillas.forEach(
+    function(row) {
+      agregar(
+        row.peaje
+      );
+    }
+  );
+
+  try {
+
+    listarUsuariosInterno_()
+      .forEach(
+        function(usuario) {
+
+          if (
+            (esUsuarioGlobal_(
+              sesion
+            ) || esUsuarioSoporte_(sesion)) ||
+            normalizarPeaje_(
+              usuario.PEAJE
+            ) === normalizarPeaje_(
+              sesion.peaje
+            )
+          ) {
+            agregar(
+              usuario.PEAJE
+            );
+          }
+        }
+      );
+
+  } catch (e) {}
+
+  return {
+    ok: true,
+    peajes:
+      Object
+        .keys(mapa)
+        .sort()
+        .map(function(key) {
+          return mapa[key];
+        })
+  };
+}
+
+
+/* ============================================================
+   CAMBIAR ESTADO USUARIO
+   ============================================================ */
+
+function cambiarEstadoUsuarioInterno_(
+  usuario,
+  nuevoEstado
+) {
+
+  const ss =
+    getSpreadsheet_();
+
+  const sh =
+    prepararHojaUsuarios_(ss);
+
+  usuario =
+    String(
+      usuario || ''
+    ).trim();
+
+  nuevoEstado =
+    String(
+      nuevoEstado || ''
+    )
+      .trim()
+      .toUpperCase();
+
+  if (
+    nuevoEstado !== 'ACTIVO' &&
+    nuevoEstado !== 'INACTIVO'
+  ) {
+
+    throw new Error(
+      'Estado no válido.'
+    );
+  }
+
+  const datos =
+    sh.getDataRange()
+      .getValues();
+
+  for (
+    let i = 1;
+    i < datos.length;
+    i++
+  ) {
+
+    if (
+      String(
+        datos[i][1] || ''
+      )
+        .trim()
+        .toLowerCase() ===
+      usuario.toLowerCase()
+    ) {
+
+      sh
+        .getRange(
+          i + 1,
+          7
+        )
+        .setValue(
+          nuevoEstado
+        );
+
+      return {
+        ok: true,
+        mensaje:
+          'Estado actualizado.'
+      };
+    }
+  }
+
+  throw new Error(
+    'Usuario no encontrado.'
+  );
+}
+
+
+/* ============================================================
+   WEB APP GET
+   ============================================================ */
+
+function doGet(e) {
+
+  try {
+
+    const params =
+      (e && e.parameter) ||
+      {};
+
+    const action =
+      String(
+        params.action ||
+        'config'
+      )
+        .trim()
+        .toLowerCase();
+
+    const callback =
+      params.callback ||
+      '';
+
+    if (['usuarios','auditoria','crearusuario','actualizarusuario','cambiarcontrasenausuario','cambiarestadousuario'].indexOf(action) >= 0) {
+      return jsonOutput_(accionAccesos_(action, params), callback);
+    }
+
+    if (
+      action === 'login'
+    ) {
+
+      return jsonOutput_(
+        autenticarUsuario(
+          params.usuario ||
+          '',
+          params.password ||
+          '',
+          params.portal || ''
+        ),
+        callback
+      );
+    }
+
+    if (
+      action === 'logout'
+    ) {
+
+      return jsonOutput_(
+        cerrarSesion_(
+          params.token ||
+          params.sessionToken ||
+          params.sesion ||
+          ''
+        ),
+        callback
+      );
+    }
+
+    if (
+      action === 'soporte' ||
+      action === 'reportarsoporte'
+    ) {
+
+      return jsonOutput_(
+        registrarSoporte_(
+          params
+        ),
+        callback
+      );
+    }
+
+    if (
+      action === 'crearticket' ||
+      action === 'actualizarticket' ||
+      action === 'responderticket' ||
+      action === 'save' ||
+      action === 'create' ||
+      action === 'update' ||
+      action === 'delete' ||
+      action === 'permanentdelete'
+    ) {
+
+      return jsonOutput_(
+        apiPost(
+          params
+        ),
+        callback
+      );
+    }
+
+    if (
+      action === 'soportes' ||
+      action === 'listasoporte'
+    ) {
+
+      const contexto =
+        obtenerContextoUsuario_(
+          params
+        );
+
+      if (!contexto.ok) {
+        return jsonOutput_(
+          contexto,
+          callback
+        );
+      }
+
+      if (
+        !esUsuarioAdministrador_(
+          contexto.sesion
+        )
+      ) {
+        return jsonOutput_({
+          ok: false,
+          error:
+            'Solo un administrador puede consultar soporte.'
+        }, callback);
+      }
+
+      return jsonOutput_(
+        listarSoporte_(
+          params
+        ),
+        callback
+      );
+    }
+
+    if (
+      action === 'sesion'
+    ) {
+
+      const contexto =
+        obtenerContextoUsuario_(
+          params
+        );
+
+      if (!contexto.ok) {
+        return jsonOutput_(
+          contexto,
+          callback
+        );
+      }
+
+      return jsonOutput_({
+        ok: true,
+        usuario:
+          contexto.sesion.usuario,
+        nombre:
+          contexto.sesion.nombre,
+        rol:
+          contexto.sesion.rol,
+        peaje:
+          contexto.sesion.peaje,
+        estado:
+          contexto.sesion.estado,
+        email:
+          contexto.sesion.email || '',
+        telefono:
+          contexto.sesion.telefono || '',
+        cargo:
+          contexto.sesion.cargo || '',
+        foto:
+          contexto.sesion.foto || ''
+      }, callback);
+    }
+
+    if (
+      action === 'perfil'
+    ) {
+
+      return jsonOutput_(
+        obtenerPerfilUsuario_(
+          params
+        ),
+        callback
+      );
+    }
+
+    if (
+      action === 'actualizarperfil'
+    ) {
+
+      return jsonOutput_(
+        actualizarPerfilPropio_(
+          params
+        ),
+        callback
+      );
+    }
+
+    return jsonOutput_(
+      apiGet({
+        action:
+          action,
+
+        id:
+          params.id ||
+          '',
+
+        q:
+          params.q ||
+          '',
+
+        estado:
+          params.estado ||
+          '',
+
+        fecha:
+          params.fecha ||
+          '',
+
+        usuario:
+          params.usuario ||
+          '',
+
+        token:
+          params.token ||
+          '',
+
+        sessionToken:
+          params.sessionToken ||
+          '',
+
+        sesion:
+          params.sesion ||
+          ''
+      }),
+      callback
+    );
+
+  } catch (error) {
+
+    return jsonOutput_({
+      ok: false,
+      error:
+        errorMessage_(error)
+    }, (e && e.parameter && e.parameter.callback) || '');
+  }
+}
+
+
+/* ============================================================
+   WEB APP POST
+   ============================================================ */
+
+function doPost(e) {
+
+  try {
+
+    const payload =
+      parsePost_(e);
+
+    const action =
+      String(
+        payload.action ||
+        'save'
+      )
+        .trim()
+        .toLowerCase();
+
+    if (['crearusuario','actualizarusuario','cambiarcontrasenausuario','cambiarestadousuario'].indexOf(action) >= 0) {
+      return jsonOutput_(gestionarAccesos_(action, payload));
+    }
+
+    if (action === 'renovarcontrasena') {
+      return jsonOutput_(renovarContrasena_(payload));
+    }
+
+    if (
+      action === 'login'
+    ) {
+
+      return jsonOutput_(
+        autenticarUsuario(
+          payload.usuario ||
+          '',
+          payload.password ||
+          '',
+          payload.portal || ''
+        )
+      );
+    }
+
+    if (
+      action === 'logout'
+    ) {
+
+      return jsonOutput_(
+        cerrarSesion_(
+          payload.token ||
+          payload.sessionToken ||
+          payload.sesion ||
+          ''
+        )
+      );
+    }
+
+    if (
+      action === 'soporte' ||
+      action === 'reportarsoporte'
+    ) {
+
+      return jsonOutput_(
+        registrarSoporte_(
+          payload
+        )
+      );
+    }
+
+    if (
+      action ===
+      'actualizarperfil'
+    ) {
+
+      return jsonOutput_(
+        actualizarPerfilPropio_(
+          payload
+        )
+      );
+    }
+
+    return jsonOutput_(
+      apiPost(
+        payload
+      )
+    );
+
+  } catch (error) {
+
+    return jsonOutput_({
+      ok: false,
+      error:
+        errorMessage_(error)
+    });
+  }
+}
+
+
+/* ============================================================
+   API GET
+   ============================================================ */
+
+function apiGet(params) {
+
+  params =
+    params || {};
+
+  const action =
+    String(
+      params.action ||
+      'config'
+    )
+      .trim()
+      .toLowerCase();
+
+  if (['usuarios','auditoria'].indexOf(action) >= 0) return accionAccesos_(action, params);
+  if (['list','get','dashboard'].indexOf(action) >= 0) {
+    const ctx = obtenerContextoUsuario_(params);
+    if (!ctx.ok) return ctx;
+    if (esUsuarioSoporte_(ctx.sesion)) return {ok:false,error:'Soporte no tiene acceso a valores ni planillas.'};
+  }
+
+  switch (action) {
+
+    case 'controlsoporte':
+      return controlSoporte_(params);
+
+    case 'tickets':
+      return listarTickets_(params);
+
+    case 'list':
+
+      return listarPlanillas_(
+        params
+      );
+
+    case 'get':
+
+      return obtenerPlanilla_(
+        params
+      );
+
+    case 'dashboard':
+
+      return obtenerDashboard_(
+        params
+      );
+
+    case 'peajes':
+
+      return listarPeajes_(
+        params
+      );
+
+    case 'config':
+
+      return obtenerConfiguracion();
+
+    case 'sesion':
+
+      return obtenerSesionRespuesta_(
+        params
+      );
+
+    case 'perfil':
+
+      return obtenerPerfilUsuario_(
+        params
+      );
+
+    case 'soportes':
+    case 'listasoporte':
+
+      return listarSoporte_(
+        params
+      );
+
+    default:
+
+      return {
+        ok: false,
+        error:
+          'Acción GET no soportada: ' +
+          action
+      };
+  }
+}
+
+
+/* ============================================================
+   RESPUESTA DE SESIÓN
+   ============================================================ */
+
+function obtenerSesionRespuesta_(params) {
+
+  const contexto =
+    obtenerContextoUsuario_(
+      params
+    );
+
+  if (!contexto.ok) {
+    return contexto;
+  }
+
+  return {
+    ok: true,
+
+    usuario:
+      contexto.sesion.usuario,
+
+    nombre:
+      contexto.sesion.nombre,
+
+    rol:
+      contexto.sesion.rol,
+
+    peaje:
+      contexto.sesion.peaje,
+
+    estado:
+      contexto.sesion.estado,
+
+    email:
+      contexto.sesion.email || '',
+
+    telefono:
+      contexto.sesion.telefono || '',
+
+    cargo:
+      contexto.sesion.cargo || '',
+
+    foto:
+      contexto.sesion.foto || ''
+  };
+}
+
+
+/* ============================================================
+   API POST
+   ============================================================ */
+
+function apiPost(data) {
+
+  data =
+    data || {};
+
+  const action =
+    String(
+      data.action ||
+      'save'
+    )
+      .trim()
+      .toLowerCase();
+
+  if (['crearusuario','actualizarusuario','cambiarcontrasenausuario','cambiarestadousuario'].indexOf(action) >= 0) return gestionarAccesos_(action, data);
+  if (['save','create','update','delete','permanentdelete'].indexOf(action) >= 0) {
+    const ctx = obtenerContextoUsuario_(data);
+    if (!ctx.ok) return ctx;
+    if (esUsuarioSoporte_(ctx.sesion)) return {ok:false,error:'Soporte no puede crear, editar, anular ni eliminar planillas.'};
+  }
+
+  switch (action) {
+
+    case 'crearticket':
+      return crearTicket_(data);
+    case 'responderticket':
+    case 'actualizarticket':
+      return actualizarTicket_(data);
+
+    case 'save':
+    case 'create':
+
+      return guardarPlanilla_(
+        data
+      );
+
+    case 'update':
+
+      return actualizarPlanilla_(
+        data
+      );
+
+    case 'delete':
+
+      return eliminarPlanilla_(
+        data
+      );
+
+    case 'permanentdelete':
+      return eliminarPlanillaDefinitivamente_(data);
+
+    case 'soporte':
+    case 'reportarsoporte':
+
+      return registrarSoporte_(
+        data
+      );
+
+    case 'actualizarperfil':
+
+      return actualizarPerfilPropio_(
+        data
+      );
+
+    default:
+
+      return {
+        ok: false,
+        error:
+          'Acción POST no soportada: ' +
+          action
+      };
+  }
+}
+
+
+/* ============================================================
+   PLANILLAS · CREAR
+   ============================================================ */
+
+function validarCodigoUnico_(sh, planilla, sesion) {
+  const codigo = String(planilla.codigo || '').trim().toUpperCase();
+  const repetidas = readAllRows_(sh).filter(function(row) {
+    return String(row.codigo || '').trim().toUpperCase() === codigo &&
+      (!planilla.id || String(row.id) !== String(planilla.id));
+  });
+  if (!repetidas.length) return { ok: true };
+
+  const editable = repetidas.find(function(row) {
+    return row.id && puedeAccederPlanilla_(sesion, row);
+  });
+  return {
+    ok: false,
+    code: 'CODIGO_DUPLICADO',
+    error: editable
+      ? 'Ya existe una planilla con este código. Abra la planilla existente para editarla y ajustar sus datos.'
+      : 'Ya existe una planilla con este código. Solicite al administrador que revise la planilla existente.',
+    existingId: editable ? String(editable.id) : ''
+  };
+}
+
+function tipoPlanilla_(row) {
+  // El tipo se deduce de las observaciones; no lo decide un campo del cliente.
+  const observaciones = [row.observaciones || '', row.obsValor || ''].join(' ');
+  return /\bre\s*cambio\b/i.test(observaciones) ? 'RECAMBIO' : 'RECAUDO';
+}
+
+function validarFechaPlanilla_(sh, planilla, sesion) {
+  const fecha = String(planilla.fecha || '');
+  const parsed = new Date(fecha + 'T12:00:00Z');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || isNaN(parsed.getTime()) || parsed.toISOString().slice(0,10) !== fecha) {
+    return {ok:false, code:'FECHA_INVALIDA', error:'Seleccione una fecha válida para la planilla.'};
+  }
+  const hoy = Utilities.formatDate(new Date(), 'America/Bogota', 'yyyy-MM-dd');
+  if (fecha > hoy) return {ok:false, code:'FECHA_INVALIDA', error:'La fecha no puede ser futura. Use la fecha del recaudo o de la visita de TransBank para el recambio.'};
+  const tipo = tipoPlanilla_(planilla);
+  const existente = readAllRows_(sh).find(function(row) {
+    return String(row.id) !== String(planilla.id || '') &&
+      normalizarEstadoPlanilla_(row.estado) !== 'ANULADA' &&
+      normalizarPeaje_(row.peaje) === normalizarPeaje_(planilla.peaje) &&
+      normalizeDateString_(row.fecha) === fecha && tipoPlanilla_(row) === tipo;
+  });
+  if (!existente) return {ok:true};
+  return {
+    ok:false, code:'FECHA_DUPLICADA',
+    error:'Ya existe una planilla de ' + tipo.toLowerCase() + ' del ' + fecha + ' para ' + planilla.peaje + '. No puede registrar otra aunque cambie el código. Edite la existente.',
+    existingId:puedeAccederPlanilla_(sesion, existente) ? String(existente.id) : ''
+  };
+}
+
+function guardarPlanilla_(data) {
+
+  const lock =
+    LockService
+      .getScriptLock();
+
+  lock.waitLock(15000);
+
+  try {
+
+    const contexto =
+      obtenerContextoUsuario_(
+        data
+      );
+
+    if (!contexto.ok) {
+      return contexto;
+    }
+
+    const sesion =
+      contexto.sesion;
+
+    const sh =
+      getPlanillasSheet_();
+
+    const clean =
+      normalizarDatos_(
+        data
+      );
+
+    /*
+     * MUY IMPORTANTE:
+     * el peaje NO lo decide el frontend.
+     *
+     * Lo decide el usuario autenticado.
+     */
+
+    const peajeUsuario =
+      normalizarPeaje_(
+        sesion.peaje
+      );
+
+    if (
+      !esUsuarioGlobal_(sesion)
+    ) {
+
+      if (!peajeUsuario) {
+
+        return {
+          ok: false,
+          error:
+            'El usuario no tiene un peaje configurado en USUARIOS.'
+        };
+      }
+
+      clean.peaje =
+        sesion.peaje;
+    }
+
+    if (
+      esUsuarioGlobal_(sesion) &&
+      !clean.peaje
+    ) {
+
+      return {
+        ok: false,
+        error:
+          'Debe indicar el peaje de la planilla.'
+      };
+    }
+
+    const validacion =
+      validarPlanilla_(
+        clean
+      );
+
+    if (!validacion.ok) {
+      return validacion;
+    }
+
+    const now =
+      new Date();
+
+    const id =
+      Utilities.getUuid();
+
+    clean.id =
+      id;
+
+    clean.codigo =
+      clean.codigo ||
+      generarCodigo_(
+        clean.fecha,
+        sh
+      );
+
+    const codigoUnico = validarCodigoUnico_(sh, clean, sesion);
+    if (!codigoUnico.ok) return codigoUnico;
+    const fechaUnica = validarFechaPlanilla_(sh, clean, sesion);
+    if (!fechaUnica.ok) return fechaUnica;
+
+    clean.estado =
+      clean.estado ||
+      'BORRADOR';
+
+    clean.createdAt =
+      now;
+
+    clean.updatedAt =
+      now;
+
+    /*
+     * El usuario de la planilla
+     * siempre será el usuario autenticado.
+     */
+
+    clean.usuario =
+      sesion.usuario;
+
+    const row =
+      objectToRow_(
+        clean
+      );
+
+    sh.appendRow(
+      row
+    );
+
+    registrarAuditoria_(
+      'CREATE',
+      clean,
+      'Planilla creada por ' +
+      sesion.usuario +
+      ' · Peaje: ' +
+      clean.peaje
+    );
+
+    const notificacion =
+      notificarCambioPlanilla_(
+        'CREACION',
+        clean,
+        sesion,
+        'Planilla creada por ' +
+        sesion.usuario
+      );
+
+    return {
+
+      ok: true,
+
+      message:
+        'Planilla guardada correctamente.',
+
+      row:
+        serializarRegistro_(
+          clean
+        ),
+
+      usuario:
+        sesion.usuario,
+
+      nombre:
+        sesion.nombre,
+
+      rol:
+        sesion.rol,
+
+      peaje:
+        sesion.peaje,
+
+      notificacion:
+        notificacion
+    };
+
+  } finally {
+
+    lock.releaseLock();
+  }
+}
+
+
+/* ============================================================
+   PLANILLAS · ACTUALIZAR
+   ============================================================ */
+
+function actualizarPlanilla_(data) {
+
+  const lock =
+    LockService
+      .getScriptLock();
+
+  lock.waitLock(15000);
+
+  try {
+
+    const contexto =
+      obtenerContextoUsuario_(
+        data
+      );
+
+    if (!contexto.ok) {
+      return contexto;
+    }
+
+    const sesion =
+      contexto.sesion;
+
+    const id =
+      String(
+        data.id ||
+        ''
+      ).trim();
+
+    if (!id) {
+
+      return {
+        ok: false,
+        error:
+          'Falta el ID de la planilla.'
+      };
+    }
+
+    const sh =
+      getPlanillasSheet_();
+
+    const found =
+      findRowById_(
+        sh,
+        id
+      );
+
+    if (!found) {
+
+      return {
+        ok: false,
+        error:
+          'No se encontró la planilla con ID: ' +
+          id
+      };
+    }
+
+    const current =
+      rowToObject_(
+        sh,
+        found.rowNumber
+      );
+
+    /*
+     * Verificar que el usuario tenga
+     * permiso sobre esa planilla.
+     */
+
+    if (
+      !puedeAccederPlanilla_(
+        sesion,
+        current
+      )
+    ) {
+
+      return {
+        ok: false,
+        error:
+          'No tiene permiso para modificar esta planilla.'
+      };
+    }
+
+    const incoming =
+      normalizarDatos_(
+        data
+      );
+
+    /*
+     * Un usuario de peaje NO puede
+     * cambiar la planilla a otro peaje.
+     */
+
+    if (
+      !esUsuarioGlobal_(sesion)
+    ) {
+
+      incoming.peaje =
+        current.peaje;
+    }
+
+    const merged =
+      Object.assign(
+        {},
+        current,
+        incoming,
+        {
+          id: id,
+
+          codigo:
+            incoming.codigo ||
+            current.codigo ||
+            generarCodigo_(
+              incoming.fecha ||
+              current.fecha,
+              sh
+            ),
+
+          estado:
+            incoming.estado ||
+            current.estado ||
+            'BORRADOR',
+
+          createdAt:
+            current.createdAt ||
+            new Date(),
+
+          updatedAt:
+            new Date(),
+
+          usuario:
+            sesion.usuario
+        }
+      );
+
+    const validacion =
+      validarPlanilla_(
+        merged
+      );
+
+    if (!validacion.ok) {
+      return validacion;
+    }
+
+    const codigoUnico = validarCodigoUnico_(sh, merged, sesion);
+    if (!codigoUnico.ok) return codigoUnico;
+    const fechaUnica = validarFechaPlanilla_(sh, merged, sesion);
+    if (!fechaUnica.ok) return fechaUnica;
+
+    sh
+      .getRange(
+        found.rowNumber,
+        1,
+        1,
+        ZIMA.HEADERS.length
+      )
+      .setValues([
+        objectToRow_(
+          merged
+        )
+      ]);
+
+    registrarAuditoria_(
+      'UPDATE',
+      merged,
+      'Planilla actualizada por ' +
+      sesion.usuario
+    );
+
+    const notificacion =
+      notificarCambioPlanilla_(
+      'ACTUALIZACION',
+      merged,
+      sesion,
+      'Planilla actualizada por ' +
+      sesion.usuario
+      );
+
+    return {
+
+      ok: true,
+
+      message:
+        'Planilla actualizada correctamente.',
+
+      row:
+        serializarRegistro_(
+          merged
+        ),
+
+      usuario:
+        sesion.usuario,
+
+      peaje:
+        sesion.peaje,
+
+      notificacion:
+        notificacion
+    };
+
+  } finally {
+
+    lock.releaseLock();
+  }
+}
+
+
+/* ============================================================
+   PLANILLAS · ELIMINAR / ANULAR
+   ============================================================ */
+
+function eliminarPlanillaDefinitivamente_(data) {
+  data = data || {};
+  const contexto = obtenerContextoUsuario_(data);
+  if (!contexto.ok) return contexto;
+  const sesion = contexto.sesion;
+  if (!esUsuarioAdministrador_(sesion)) {
+    return {ok: false, error: 'Solo un administrador puede eliminar definitivamente una planilla.'};
+  }
+  const id = String(data.id || '').trim();
+  if (!id) return {ok: false, error: 'Falta el ID de la planilla.'};
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = getPlanillasSheet_();
+    const found = findRowById_(sh, id);
+    if (!found) return {ok: false, error: 'Planilla no encontrada.'};
+    const current = rowToObject_(sh, found.rowNumber);
+    if (!puedeAccederPlanilla_(sesion, current)) {
+      return {ok: false, error: 'No tiene permiso para eliminar esta planilla.'};
+    }
+    sh.deleteRow(found.rowNumber);
+    registrarAuditoria_('PERMANENT_DELETE', Object.assign({}, current, {usuario: sesion.usuario}),
+      'Planilla eliminada definitivamente por ' + sesion.usuario);
+    return {ok: true, id: id, message: 'Planilla eliminada definitivamente.'};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function eliminarPlanilla_(data) {
+
+  const lock =
+    LockService
+      .getScriptLock();
+
+  lock.waitLock(15000);
+
+  try {
+
+    data =
+      data || {};
+
+    const contexto =
+      obtenerContextoUsuario_(
+        data
+      );
+
+    if (!contexto.ok) {
+      return contexto;
+    }
+
+    const sesion =
+      contexto.sesion;
+
+    const id =
+      String(
+        data.id ||
+        ''
+      ).trim();
+
+    if (!id) {
+
+      return {
+        ok: false,
+        error:
+          'Falta el ID de la planilla.'
+      };
+    }
+
+    const sh =
+      getPlanillasSheet_();
+
+    const found =
+      findRowById_(
+        sh,
+        id
+      );
+
+    if (!found) {
+
+      return {
+        ok: false,
+        error:
+          'Planilla no encontrada.'
+      };
+    }
+
+    const current =
+      rowToObject_(
+        sh,
+        found.rowNumber
+      );
+
+    if (
+      !puedeAccederPlanilla_(
+        sesion,
+        current
+      )
+    ) {
+
+      return {
+        ok: false,
+        error:
+          'No tiene permiso para anular esta planilla.'
+      };
+    }
+
+    const fechaAnulacion =
+      new Date();
+
+    sh
+      .getRange(
+        found.rowNumber,
+        headerIndex_(
+          'estado'
+        )
+      )
+      .setValue(
+        'ANULADA'
+      );
+
+    sh
+      .getRange(
+        found.rowNumber,
+        headerIndex_(
+          'updatedAt'
+        )
+      )
+      .setValue(
+        fechaAnulacion
+      );
+
+    const anulada =
+      Object.assign(
+        {},
+        current,
+        {
+          estado:
+            'ANULADA',
+
+          updatedAt:
+            fechaAnulacion,
+
+          usuario:
+            sesion.usuario
+        }
+      );
+
+    registrarAuditoria_(
+      'DELETE',
+      anulada,
+      'Planilla anulada por ' +
+      sesion.usuario
+    );
+
+    const notificacion =
+      notificarCambioPlanilla_(
+      'ANULACION',
+      anulada,
+      sesion,
+      'Planilla anulada por ' +
+      sesion.usuario
+      );
+
+    return {
+      ok: true,
+      message:
+        'Planilla anulada correctamente.',
+      notificacion:
+        notificacion
+    };
+
+  } finally {
+
+    lock.releaseLock();
+  }
+}
+
+
+/* ============================================================
+   CONSULTAR PLANILLAS
+   ============================================================ */
+
+function listarPlanillas_(params) {
+
+  params =
+    params || {};
+
+  const contexto =
+    obtenerContextoUsuario_(
+      params
+    );
+
+  if (!contexto.ok) {
+    return contexto;
+  }
+
+  const sesion =
+    contexto.sesion;
+
+  const sh =
+    getPlanillasSheet_();
+
+  let rows =
+    readAllRows_(
+      sh
+    );
+
+  /*
+   * FILTRO PRINCIPAL:
+   *
+   * Usuario de peaje:
+   * solamente su peaje.
+   *
+   * Admin / Interventoría:
+   * TODOS.
+   */
+
+  if (
+    !esUsuarioGlobal_(sesion)
+  ) {
+
+    const peaje =
+      normalizarPeaje_(
+        sesion.peaje
+      );
+
+    rows =
+      rows.filter(
+        function(row) {
+
+          return (
+            normalizarPeaje_(
+              row.peaje
+            ) === peaje
+          );
+
+        }
+      );
+  }
+
+  const q =
+    String(
+      params.q ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+  const estado =
+    normalizarEstadoPlanilla_(
+      params.estado ||
+      ''
+    );
+
+  const fecha =
+    String(
+      params.fecha ||
+      ''
+    ).trim();
+
+  const filtered =
+    rows.filter(
+      function(row) {
+
+        if (
+          estado &&
+          normalizarEstadoPlanilla_(
+            row.estado ||
+            ''
+          ) !==
+          estado
+        ) {
+          return false;
+        }
+
+        if (
+          fecha &&
+          normalizeDateString_(
+            row.fecha
+          ) !== fecha
+        ) {
+          return false;
+        }
+
+        if (q) {
+
+          const text = [
+
+            row.id,
+            row.codigo,
+            row.peaje,
+            row.razon,
+            row.recibe,
+            row.ciudad,
+            row.lugarEntrega,
+            row.lugarRecibo,
+            row.entregadoNombre,
+            row.usuario
+
+          ]
+            .join(' ')
+            .toLowerCase();
+
+          if (
+            text.indexOf(q) === -1
+          ) {
+            return false;
+          }
+        }
+
+        return true;
+      }
+    );
+
+  filtered.sort(
+    function(a, b) {
+
+      return (
+        dateValue_(
+          b.updatedAt ||
+          b.createdAt
+        ) -
+        dateValue_(
+          a.updatedAt ||
+          a.createdAt
+        )
+      );
+    }
+  );
+
+  return {
+
+    ok: true,
+
+    rows:
+      filtered.map(
+        serializarRegistro_
+      ),
+
+    total:
+      filtered.length,
+
+    usuario:
+      sesion.usuario,
+
+    nombre:
+      sesion.nombre,
+
+    rol:
+      sesion.rol,
+
+    peaje:
+      sesion.peaje
+  };
+}
+
+
+/* ============================================================
+   OBTENER UNA PLANILLA
+   ============================================================ */
+
+function obtenerPlanilla_(params) {
+
+  params =
+    params || {};
+
+  const contexto =
+    obtenerContextoUsuario_(
+      params
+    );
+
+  if (!contexto.ok) {
+    return contexto;
+  }
+
+  const sesion =
+    contexto.sesion;
+
+  const id =
+    String(
+      params.id ||
+      ''
+    ).trim();
+
+  if (!id) {
+
+    return {
+      ok: false,
+      error:
+        'Falta el ID de la planilla.'
+    };
+  }
+
+  const sh =
+    getPlanillasSheet_();
+
+  const found =
+    findRowById_(
+      sh,
+      id
+    );
+
+  if (!found) {
+
+    return {
+      ok: false,
+      error:
+        'No se encontró la planilla.'
+    };
+  }
+
+  const row =
+    rowToObject_(
+      sh,
+      found.rowNumber
+    );
+
+  if (
+    !puedeAccederPlanilla_(
+      sesion,
+      row
+    )
+  ) {
+
+    return {
+      ok: false,
+      error:
+        'No tiene permiso para consultar esta planilla.'
+    };
+  }
+
+  return {
+
+    ok: true,
+
+    row:
+      serializarRegistro_(
+        row
+      ),
+
+    usuario:
+      sesion.usuario,
+
+    nombre:
+      sesion.nombre,
+
+    rol:
+      sesion.rol,
+
+    peaje:
+      sesion.peaje
+  };
+}
+
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+
+function obtenerDashboard_(params) {
+
+  params =
+    params || {};
+
+  const contexto =
+    obtenerContextoUsuario_(
+      params
+    );
+
+  if (!contexto.ok) {
+    return contexto;
+  }
+
+  const sesion =
+    contexto.sesion;
+
+  let rows =
+    readAllRows_(
+      getPlanillasSheet_()
+    );
+
+  /*
+   * FILTRO POR PEAJE
+   */
+
+  if (
+    !esUsuarioGlobal_(sesion)
+  ) {
+
+    const peaje =
+      normalizarPeaje_(
+        sesion.peaje
+      );
+
+    rows =
+      rows.filter(
+        function(r) {
+
+          return (
+            normalizarPeaje_(
+              r.peaje
+            ) === peaje
+          );
+
+        }
+      );
+  }
+
+  const activas =
+    rows.filter(
+      function(r) {
+
+        return String(
+          normalizarEstadoPlanilla_(
+            r.estado
+          )
+        ) !==
+        'ANULADA';
+
+      }
+    );
+
+  const total =
+    activas.reduce(
+      function(sum, r) {
+
+        return sum +
+          number_(
+            r.total
+          );
+
+      },
+      0
+    );
+
+  const entregadas =
+    activas.filter(
+      function(r) {
+
+        return normalizarEstadoPlanilla_(
+          r.estado
+        ) ===
+        'ENTREGADA';
+
+      }
+    ).length;
+
+  const cerradas =
+    activas.filter(
+      function(r) {
+
+        return normalizarEstadoPlanilla_(
+          r.estado
+        ) ===
+        'CERRADA';
+
+      }
+    ).length;
+
+  const now =
+    new Date();
+
+  const year =
+    now.getFullYear();
+
+  const month =
+    now.getMonth();
+
+  const monthRows =
+    activas.filter(
+      function(r) {
+
+        const d =
+          asDate_(
+            r.fecha
+          );
+
+        return (
+          d &&
+          d.getFullYear() ===
+            year &&
+          d.getMonth() ===
+            month
+        );
+      }
+    );
+
+  const monthTotal =
+    monthRows.reduce(
+      function(sum, r) {
+
+        return sum +
+          number_(
+            r.total
+          );
+
+      },
+      0
+    );
+
+  const monthlyTotals =
+    Array.from(
+      {
+        length: 12
+      },
+      function() {
+        return 0;
+      }
+    );
+
+  activas.forEach(
+    function(r) {
+
+      const d =
+        asDate_(
+          r.fecha
+        );
+
+      if (
+        d &&
+        d.getFullYear() ===
+          year
+      ) {
+
+        monthlyTotals[
+          d.getMonth()
+        ] += number_(
+          r.total
+        );
+      }
+    }
+  );
+
+  const recent =
+    activas
+      .sort(
+        function(a, b) {
+
+          return (
+            dateValue_(
+              b.updatedAt ||
+              b.createdAt
+            ) -
+            dateValue_(
+              a.updatedAt ||
+              a.createdAt
+            )
+          );
+        }
+      )
+      .slice(
+        0,
+        10
+      )
+      .map(
+        serializarRegistro_
+      );
+
+  return {
+
+    ok: true,
+
+    usuario:
+      sesion.usuario,
+
+    nombre:
+      sesion.nombre,
+
+    rol:
+      sesion.rol,
+
+    peaje:
+      sesion.peaje,
+
+    estado:
+      sesion.estado,
+
+    metrics: {
+
+      planillas:
+        activas.length,
+
+      total:
+        total,
+
+      monthTotal:
+        monthTotal,
+
+      entregadas:
+        entregadas,
+
+      cerradas:
+        cerradas
+    },
+
+    monthlyTotals:
+      monthlyTotals,
+
+    recent:
+      recent,
+
+    generatedAt:
+      new Date().toISOString()
+  };
+}
+
+
+/* ============================================================
+   SEGURIDAD · ROLES Y CONTRASEÑAS
+   ============================================================ */
+
+function esUsuarioSoporte_(sesion) {
+  return String(sesion && sesion.rol || '').trim().toUpperCase() === 'SOPORTE';
+}
+
+function puedeGestionarSoporte_(sesion) {
+  return esUsuarioAdministrador_(sesion) || esUsuarioSoporte_(sesion);
+}
+
+function accionAccesos_(action, data) {
+  if (action === 'usuarios') return listarUsuariosAutorizados_(data);
+  if (action === 'auditoria') return listarAuditoria_(data);
+  return gestionarAccesos_(action, data);
+}
+
+function listarUsuariosAutorizados_(data) {
+  const ctx = obtenerContextoUsuario_(data);
+  if (!ctx.ok) return ctx;
+  if (!puedeGestionarSoporte_(ctx.sesion)) return {ok:false,error:'No tiene permiso para gestionar accesos.'};
+  const soporte = esUsuarioSoporte_(ctx.sesion);
+  const usuarios = listarUsuariosInterno_().filter(function(u) {
+    return !soporte || String(u.ROL).trim().toUpperCase() === 'PEAJE';
+  });
+  return {ok:true,usuarios:usuarios,soporte:soporte};
+}
+
+function gestionarAccesos_(action, data) {
+  data = data || {};
+  const ctx = obtenerContextoUsuario_(data);
+  if (!ctx.ok) return ctx;
+  if (!puedeGestionarSoporte_(ctx.sesion)) return {ok:false,error:'No tiene permiso para gestionar accesos.'};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const usuario = String(data.usuario || '').trim();
+    const anterior = buscarUsuario_(usuario);
+    const creando = action === 'crearusuario';
+    if (!creando && !anterior) return {ok:false,error:'Usuario no encontrado.'};
+    if (data.estado && ['ACTIVO','INACTIVO'].indexOf(String(data.estado).trim().toUpperCase()) < 0) return {ok:false,error:'Estado de acceso no válido.'};
+    if (esUsuarioSoporte_(ctx.sesion)) {
+      if ((!creando && String(anterior.ROL).trim().toUpperCase() !== 'PEAJE') ||
+          ((creando || action === 'actualizarusuario') && String(data.rol || '').toUpperCase() !== 'PEAJE')) {
+        return {ok:false,error:'Soporte solo puede gestionar usuarios de peaje. No puede modificar administradores ni conceder otros roles.'};
+      }
+      if ((creando || action === 'actualizarusuario') && (!data.peaje || /^(TODOS|ADMINISTRACI[ÓO]N CENTRAL)$/i.test(String(data.peaje).trim()))) {
+        return {ok:false,error:'Seleccione el peaje específico del usuario.'};
+      }
+    }
+    const password = String(data.nuevaContrasena || data.password || data.contrasena || '');
+    if ((creando || action === 'cambiarcontrasenausuario' || password) && password.length < 6) {
+      return {ok:false,error:'La contraseña debe tener al menos 6 caracteres.'};
+    }
+    prepararHojaAuditoria_(getSpreadsheet_());
+    let result;
+    let evento;
+    if (creando) {result = crearUsuarioInterno_(data);evento = 'USER_CREATE';}
+    else if (action === 'actualizarusuario') {result = actualizarUsuarioInterno_(data);evento = 'USER_UPDATE';}
+    else if (action === 'cambiarcontrasenausuario') {result = cambiarContrasenaUsuarioInterno_(usuario,password);evento = 'USER_PASSWORD';}
+    else if (action === 'cambiarestadousuario') {result = cambiarEstadoUsuarioInterno_(usuario,data.estado);evento = 'USER_STATUS';}
+    else return {ok:false,error:'Acción de acceso no soportada.'};
+    if (!result || !result.ok) return result;
+    SpreadsheetApp.flush();
+    const actual = buscarUsuario_(usuario);
+    if (!actual) throw Error('No se pudo verificar el usuario guardado.');
+    if (password && !verificarContrasena_(password, actual.CONTRASENA)) throw Error('No se pudo confirmar el cambio de contraseña.');
+    if (data.estado && String(actual.ESTADO).toUpperCase() !== String(data.estado).toUpperCase()) throw Error('No se pudo confirmar el estado del usuario.');
+    const cambios = [];
+    const campos = {nombre:'NOMBRE',rol:'ROL',peaje:'PEAJE',estado:'ESTADO',email:'EMAIL',telefono:'TELEFONO',cargo:'CARGO'};
+    Object.keys(campos).forEach(function(key) {
+      let esperado = String(data[key] || (key === 'peaje' ? 'TODOS' : '')).trim();
+      if (key === 'rol' || key === 'estado') esperado = esperado.toUpperCase();
+      if (data[key] !== undefined && String(actual[campos[key]] || '').trim() !== esperado) {
+        throw Error('No se pudo confirmar el campo ' + key + '. Actualice la lista antes de reintentar.');
+      }
+      if (data[key] !== undefined && String(anterior && anterior[campos[key]] || '') !== String(actual[campos[key]] || '')) cambios.push(key);
+    });
+    if (password) cambios.push('contraseña renovada');
+    registrarAuditoria_(evento,{id:actual.ID,usuario:ctx.sesion.usuario},'Usuario: '+usuario+' · Cambios: '+(cambios.join(', ') || 'perfil'));
+    if (data.estado && String(actual.ESTADO).trim().toUpperCase() === 'INACTIVO' &&
+        String(anterior && anterior.ESTADO || '').trim().toUpperCase() !== 'INACTIVO') {
+      notificarSeguimientoAcceso_({
+        usuario: actual.USUARIO,
+        nombre: actual.NOMBRE,
+        rol: actual.ROL,
+        peaje: actual.PEAJE,
+        estado: actual.ESTADO,
+        evento: 'USUARIO_INACTIVADO',
+        detalle: 'La cuenta fue marcada como inactiva por ' + ctx.sesion.usuario + '.'
+      });
+    }
+    if (password && action !== 'crearusuario') {
+      notificarSeguimientoAcceso_({
+        usuario: actual.USUARIO,
+        nombre: actual.NOMBRE,
+        rol: actual.ROL,
+        peaje: actual.PEAJE,
+        estado: actual.ESTADO,
+        evento: 'CONTRASENA_RENOVADA',
+        detalle: 'Un administrador renovó la contraseña de la cuenta.'
+      });
+    }
+    return Object.assign({}, result, {ok:true,verificado:true});
+  } finally {lock.releaseLock();}
+}
+
+function listarAuditoria_(data) {
+  const ctx = obtenerContextoUsuario_(data);
+  if (!ctx.ok) return ctx;
+  if (!puedeGestionarSoporte_(ctx.sesion)) return {ok:false,error:'No tiene permiso para consultar auditoría.'};
+  const sh = getSpreadsheet_().getSheetByName(ZIMA.SHEET_AUDITORIA);
+  if (!sh || sh.getLastRow() < 2) return {ok:true,rows:[]};
+  const inicio = Math.max(2,sh.getLastRow()-199);
+  const rows = sh.getRange(inicio,1,sh.getLastRow()-inicio+1,7).getValues().reverse().map(function(row) {
+    let ingreso = {};
+    if (row[1] === 'PEAJE_LOGIN') {try {const decoded = JSON.parse(row[5]);if (decoded && typeof decoded === 'object') ingreso = decoded;} catch (_) {}}
+    const tecnico = /^USER_/.test(String(row[1])) || row[1] === 'TICKET_UPDATE';
+    const detalle = row[1] === 'PEAJE_LOGIN' ? 'Ingreso al sistema · '+String(ingreso.peaje || '') : esUsuarioSoporte_(ctx.sesion) && !tecnico ? 'Movimiento de planilla (datos financieros reservados).' : row[5];
+    return {fecha:row[0] instanceof Date ? row[0].toISOString() : String(row[0] || ''),accion:row[1],id:row[2],codigo:row[3],usuario:row[4],detalle:detalle,peaje:String(ingreso.peaje || ''),nombre:String(ingreso.nombre || '')};
+  });
+  return {ok:true,rows:rows};
+}
+
+function registrarIngresoPeaje_(sesion) {
+  if (String(sesion.rol).toUpperCase() !== 'PEAJE') return;
+  try {
+    prepararHojaAuditoria_(getSpreadsheet_());
+    registrarAuditoria_('PEAJE_LOGIN',{id:Utilities.getUuid(),usuario:sesion.usuario},JSON.stringify({peaje:sesion.peaje,nombre:sesion.nombre || sesion.usuario}));
+  } catch (error) {console.error('No se pudo registrar el ingreso: '+errorMessage_(error));}
+}
+
+function controlSoporte_(data) {
+  const ctx = obtenerContextoUsuario_(data);
+  if (!ctx.ok) return ctx;
+  if (!puedeGestionarSoporte_(ctx.sesion)) return {ok:false,error:'Este centro está reservado a soporte y administración.'};
+  const hoy = Utilities.formatDate(new Date(),'America/Bogota','yyyy-MM-dd');
+  function iso(value) {const date = value ? new Date(value) : null;return date && !isNaN(date.getTime()) ? date.toISOString() : '';}
+  const usuarios = obtenerUsuariosDesdeHoja_(prepararHojaUsuarios_(getSpreadsheet_())).filter(function(user) {return String(user.ROL).trim().toUpperCase() === 'PEAJE';}).map(function(user) {
+    const ultimo = iso(user.ULTIMO_INGRESO);
+    return {usuario:user.USUARIO,nombre:user.NOMBRE || user.USUARIO,peaje:user.PEAJE,estado:String(user.ESTADO || '').trim().toUpperCase(),ultimoIngreso:ultimo,ingresoHoy:!!ultimo && Utilities.formatDate(new Date(ultimo),'America/Bogota','yyyy-MM-dd') === hoy,requiereCambioContrasena:estadoContrasena_(user).requiereCambioContrasena};
+  });
+  const auditoria = listarAuditoria_(data);
+  if (!auditoria.ok) return auditoria;
+  const tickets = listarTickets_(data);
+  if (!tickets.ok) return tickets;
+  return {ok:true,serverTime:new Date().toISOString(),usuarios:usuarios,auditoria:auditoria.rows,
+    eventos:auditoria.rows.filter(function(row) {return row.accion === 'PEAJE_LOGIN' && row.id;}).map(function(row) {return {id:row.id,fecha:row.fecha,usuario:row.usuario,nombre:row.nombre,peaje:row.peaje};}),
+    tickets:tickets.rows.map(function(row) {return {id:row.id,titulo:row.titulo,estado:row.estado,prioridad:row.prioridad,peaje:row.peaje,fecha:row.fecha,updatedAt:row.updatedAt};})};
+}
+
+// Entradas públicas compatibles con google.script.run, siempre autenticadas.
+function crearUsuario(data) {return gestionarAccesos_('crearusuario',data);}
+function actualizarUsuario(data) {return gestionarAccesos_('actualizarusuario',data);}
+function cambiarContrasenaUsuario(data) {return gestionarAccesos_('cambiarcontrasenausuario',data);}
+function cambiarEstadoUsuario(data) {return gestionarAccesos_('cambiarestadousuario',data);}
+function listarUsuarios(data) {return listarUsuariosAutorizados_(data);}
+
+function esUsuarioAdministrador_(sesion) {
+
+  if (!sesion) {
+    return false;
+  }
+
+  const rol =
+    String(
+      sesion.rol || ''
+    )
+      .trim()
+      .toUpperCase();
+
+  return (
+    rol === 'ADMIN' ||
+    rol === 'ADMINISTRADOR'
+  );
+}
+
+
+function hashContrasena_(password) {
+
+  password =
+    String(
+      password == null
+        ? ''
+        : password
+    );
+
+  const bytes =
+    Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,
+      password,
+      Utilities.Charset.UTF_8
+    );
+
+  return bytes
+    .map(function(byte) {
+      const v =
+        byte < 0
+          ? byte + 256
+          : byte;
+
+      return ('0' + v.toString(16))
+        .slice(-2);
+    })
+    .join('');
+}
+
+
+function esHashContrasena_(value) {
+
+  return /^[a-f0-9]{64}$/i.test(
+    String(value || '').trim()
+  );
+}
+
+
+function verificarContrasena_(
+  password,
+  almacenada
+) {
+
+  password =
+    String(
+      password == null
+        ? ''
+        : password
+    );
+
+  almacenada =
+    String(
+      almacenada == null
+        ? ''
+        : almacenada
+    ).trim();
+
+  if (!password || !almacenada) {
+    return false;
+  }
+
+  // Compatibilidad con instalaciones anteriores.
+  if (!esHashContrasena_(almacenada)) {
+    return almacenada === password;
+  }
+
+  return (
+    hashContrasena_(password)
+      .toLowerCase() ===
+    almacenada.toLowerCase()
+  );
+}
+
+
+/* ============================================================
+   PERMISOS POR PEAJE
+   ============================================================ */
+
+function esUsuarioGlobal_(sesion) {
+
+  if (!sesion) {
+    return false;
+  }
+
+  if (esUsuarioSoporte_(sesion)) return false;
+
+  const rol =
+    String(
+      sesion.rol ||
+      ''
+    )
+      .trim()
+      .toUpperCase();
+
+  const peaje =
+    normalizarPeaje_(
+      sesion.peaje
+    );
+
+  if (
+    rol === 'ADMIN' ||
+    rol === 'ADMINISTRADOR' ||
+    rol === 'INTERVENTORIA'
+  ) {
+    return true;
+  }
+
+  if (
+    peaje === 'TODOS' ||
+    peaje === 'ADMINISTRACION CENTRAL' ||
+    peaje === 'ADMINISTRACIÓN CENTRAL'
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+
+function puedeAccederPlanilla_(
+  sesion,
+  row
+) {
+
+  if (!sesion || !row) {
+    return false;
+  }
+
+  if (esUsuarioSoporte_(sesion)) return false;
+  if (
+    esUsuarioGlobal_(
+      sesion
+    )
+  ) {
+    return true;
+  }
+
+  const peajeUsuario =
+    normalizarPeaje_(
+      sesion.peaje
+    );
+
+  const peajePlanilla =
+    normalizarPeaje_(
+      row.peaje
+    );
+
+  return (
+    peajeUsuario &&
+    peajePlanilla &&
+    peajeUsuario ===
+      peajePlanilla
+  );
+}
+
+
+function normalizarPeaje_(value) {
+
+  return String(
+    value ||
+    ''
+  )
+    .trim()
+    .replace(
+      /\s+/g,
+      ' '
+    )
+    .toUpperCase();
+}
+
+
+function normalizarEstadoPlanilla_(
+  value
+) {
+
+  const estado =
+    String(
+      value ||
+      ''
+    )
+      .trim()
+      .toUpperCase();
+
+  if (
+    estado ===
+    'ENTREGADO'
+  ) {
+    return 'ENTREGADA';
+  }
+
+  return estado;
+}
+
+
+/* ============================================================
+   NORMALIZACIÓN DE DATOS
+   ============================================================ */
+
+function normalizarDatos_(data) {
+
+  data =
+    data || {};
+
+  const textFields = [
+
+    'id',
+    'codigo',
+    'peaje',
+    'razon',
+    'moneda',
+    'lugarEntrega',
+    'recibe',
+    'ciudad',
+    'lugarRecibo',
+    'concepto',
+    'obsValor',
+    'letras',
+    'observaciones',
+    'entregadoNombre',
+    'entregadoFirma',
+    'revisadoNombre',
+    'revisadoFirma',
+    'estado',
+    'usuario'
+
+  ];
+
+  const result = {};
+
+  textFields.forEach(
+    function(key) {
+
+      result[key] =
+        data[key] == null
+          ? ''
+          : String(
+              data[key]
+            ).trim();
+
+    }
+  );
+
+  result.total =
+    number_(
+      data.total
+    );
+
+  result.tula =
+    result.total;
+
+  result.billetes =
+    0;
+
+  result.fecha =
+    normalizeDateString_(
+      data.fecha
+    );
+
+  result.estado =
+    normalizarEstadoPlanilla_(
+      result.estado
+    );
+  result.tipoPlanilla = tipoPlanilla_(data);
+
+  return result;
+}
+
+
+/* ============================================================
+   VALIDAR PLANILLA
+   ============================================================ */
+
+function validarPlanilla_(d) {
+
+  if (!d.peaje) {
+
+    return {
+      ok: false,
+      error:
+        'El campo Peaje es obligatorio.'
+    };
+  }
+
+  if (!d.fecha) {
+
+    return {
+      ok: false,
+      error:
+        'La fecha es obligatoria.'
+    };
+  }
+
+  if (d.total <= 0) {
+
+    return {
+      ok: false,
+      error:
+        'El Total entregado debe ser mayor que cero.'
+    };
+  }
+
+  if (
+    d.tula < 0 ||
+    d.billetes < 0
+  ) {
+
+    return {
+      ok: false,
+      error:
+        'Los valores de tula y billetes no pueden ser negativos.'
+    };
+  }
+
+  const estadosPermitidos = [
+    'BORRADOR',
+    'APROBADO',
+    'ENTREGADA',
+    'CERRADA',
+    'ANULADA'
+  ];
+
+  d.estado =
+    normalizarEstadoPlanilla_(
+      d.estado
+    );
+
+  if (
+    d.estado &&
+    estadosPermitidos.indexOf(
+      d.estado
+    ) === -1
+  ) {
+
+    return {
+      ok: false,
+      error:
+        'Estado no válido.'
+    };
+  }
+
+  return {
+    ok: true
+  };
+}
+
+
+/* ============================================================
+   OBJETO → FILA
+   ============================================================ */
+
+function objectToRow_(obj) {
+
+  return ZIMA.HEADERS.map(
+    function(header) {
+
+      let value =
+        obj[header];
+
+      if (
+        header === 'total' ||
+        header === 'tula' ||
+        header === 'billetes'
+      ) {
+
+        return number_(
+          value
+        );
+      }
+
+      if (
+        header === 'fecha'
+      ) {
+
+        return normalizeDateString_(
+          value
+        );
+      }
+
+      if (
+        header === 'createdAt' ||
+        header === 'updatedAt'
+      ) {
+
+        return value
+          ? new Date(value)
+          : new Date();
+      }
+
+      return value == null
+        ? ''
+        : value;
+    }
+  );
+}
+
+
+/* ============================================================
+   FILA → OBJETO
+   ============================================================ */
+
+function rowToObject_(
+  sh,
+  rowNumber
+) {
+
+  const values =
+    sh
+      .getRange(
+        rowNumber,
+        1,
+        1,
+        ZIMA.HEADERS.length
+      )
+      .getValues()[0];
+
+  const obj = {};
+
+  ZIMA.HEADERS.forEach(
+    function(header, i) {
+
+      obj[header] =
+        values[i];
+
+    }
+  );
+
+  return obj;
+}
+
+
+/* ============================================================
+   LEER TODAS LAS FILAS
+   ============================================================ */
+
+function readAllRows_(sh) {
+
+  const lastRow =
+    sh.getLastRow();
+
+  if (
+    lastRow < 2
+  ) {
+    return [];
+  }
+
+  const values =
+    sh
+      .getRange(
+        2,
+        1,
+        lastRow - 1,
+        ZIMA.HEADERS.length
+      )
+      .getValues();
+
+  return values.map(
+    function(row) {
+
+      const obj = {};
+
+      ZIMA.HEADERS.forEach(
+        function(header, i) {
+
+          obj[header] =
+            row[i];
+
+        }
+      );
+
+      return obj;
+    }
+  );
+}
+
+
+/* ============================================================
+   BUSCAR FILA POR ID
+   ============================================================ */
+
+function findRowById_(
+  sh,
+  id
+) {
+
+  const idCol =
+    headerIndex_(
+      'id'
+    );
+
+  const lastRow =
+    sh.getLastRow();
+
+  if (
+    lastRow < 2
+  ) {
+    return null;
+  }
+
+  const values =
+    sh
+      .getRange(
+        2,
+        idCol,
+        lastRow - 1,
+        1
+      )
+      .getValues();
+
+  for (
+    let i = 0;
+    i < values.length;
+    i++
+  ) {
+
+    if (
+      String(
+        values[i][0]
+      ) ===
+      String(id)
+    ) {
+
+      return {
+        rowNumber:
+          i + 2
+      };
+    }
+  }
+
+  return null;
+}
+
+
+/* ============================================================
+   ÍNDICE DE COLUMNA
+   ============================================================ */
+
+function headerIndex_(name) {
+
+  const index =
+    ZIMA.HEADERS.indexOf(
+      name
+    );
+
+  if (
+    index === -1
+  ) {
+
+    throw new Error(
+      'Columna no configurada: ' +
+      name
+    );
+  }
+
+  return index + 1;
+}
+
+
+/* ============================================================
+   GENERAR CÓDIGO
+   ============================================================ */
+
+function generarCodigo_(
+  fecha,
+  sh
+) {
+
+  const d =
+    normalizeDateString_(
+      fecha
+    ) ||
+    Utilities.formatDate(
+      new Date(),
+      Session.getScriptTimeZone(),
+      'yyyy-MM-dd'
+    );
+
+  const base =
+    d.replace(
+      /-/g,
+      ''
+    );
+
+  const rows =
+    readAllRows_(
+      sh
+    );
+
+  let max = 0;
+
+  rows.forEach(
+    function(r) {
+
+      const codigo =
+        String(
+          r.codigo ||
+          ''
+        );
+
+      if (
+        codigo.indexOf(
+          'P' + base
+        ) === 0
+      ) {
+
+        const n =
+          parseInt(
+            codigo.slice(
+              (
+                'P' +
+                base
+              ).length
+            ),
+            10
+          );
+
+        if (
+          !isNaN(n)
+        ) {
+
+          max =
+            Math.max(
+              max,
+              n
+            );
+        }
+      }
+    }
+  );
+
+  return (
+    'P' +
+    base +
+    String(
+      max + 1
+    ).padStart(
+      4,
+      '0'
+    )
+  );
+}
+
+
+/* ============================================================
+   SERIALIZAR
+   ============================================================ */
+
+function serializarRegistro_(
+  obj
+) {
+
+  const copy = {};
+
+  Object.keys(
+    obj
+  ).forEach(
+    function(key) {
+
+      const value =
+        obj[key];
+
+      if (
+        value instanceof Date
+      ) {
+
+        if (
+          key === 'fecha'
+        ) {
+
+          copy[key] =
+            Utilities.formatDate(
+              value,
+              Session.getScriptTimeZone(),
+              'yyyy-MM-dd'
+            );
+
+        } else {
+
+          copy[key] =
+            value.toISOString();
+        }
+
+      } else {
+
+        copy[key] =
+          key === 'estado'
+            ? normalizarEstadoPlanilla_(
+                value
+              )
+            : value;
+      }
+    }
+  );
+
+  copy.tipoPlanilla = tipoPlanilla_(obj);
+  return copy;
+}
+
+
+/* ============================================================
+   NÚMEROS
+   ============================================================ */
+
+function number_(value) {
+
+  if (
+    typeof value ===
+    'number'
+  ) {
+
+    return isFinite(
+      value
+    )
+      ? value
+      : 0;
+  }
+
+  if (
+    value == null ||
+    value === ''
+  ) {
+
+    return 0;
+  }
+
+  let s =
+    String(
+      value
+    ).trim();
+
+  s =
+    s.replace(
+      /[^\d,.-]/g,
+      ''
+    );
+
+  if (
+    s.indexOf('.') !== -1 &&
+    s.indexOf(',') !== -1
+  ) {
+
+    s =
+      s
+        .replace(
+          /\./g,
+          ''
+        )
+        .replace(
+          ',',
+          '.'
+        );
+
+  } else if (
+    s.indexOf('.') !== -1
+  ) {
+
+    /*
+     * Si viene algo como 8.000.000,
+     * se interpreta como 8000000.
+     */
+
+    if (
+      /^\d{1,3}(\.\d{3})+$/.test(
+        s
+      )
+    ) {
+
+      s =
+        s.replace(
+          /\./g,
+          ''
+        );
+
+    } else {
+
+      s =
+        s.replace(
+          ',',
+          '.'
+        );
+    }
+
+  } else {
+
+    s =
+      s.replace(
+        ',',
+        '.'
+      );
+  }
+
+  const n =
+    Number(s);
+
+  return isFinite(n)
+    ? n
+    : 0;
+}
+
+
+/* ============================================================
+   FECHAS
+   ============================================================ */
+
+function normalizeDateString_(
+  value
+) {
+
+  if (!value) {
+    return '';
+  }
+
+  if (
+    Object.prototype.toString.call(
+      value
+    ) ===
+      '[object Date]' &&
+    !isNaN(
+      value.getTime()
+    )
+  ) {
+
+    return Utilities.formatDate(
+      value,
+      Session.getScriptTimeZone(),
+      'yyyy-MM-dd'
+    );
+  }
+
+  const s =
+    String(
+      value
+    ).trim();
+
+  if (
+    /^\d{4}-\d{2}-\d{2}$/.test(
+      s
+    )
+  ) {
+
+    return s;
+  }
+
+  const d =
+    new Date(s);
+
+  if (
+    isNaN(
+      d.getTime()
+    )
+  ) {
+
+    return '';
+  }
+
+  return Utilities.formatDate(
+    d,
+    Session.getScriptTimeZone(),
+    'yyyy-MM-dd'
+  );
+}
+
+
+function asDate_(
+  value
+) {
+
+  if (!value) {
+    return null;
+  }
+
+  if (
+    Object.prototype.toString.call(
+      value
+    ) ===
+    '[object Date]'
+  ) {
+
+    return isNaN(
+      value.getTime()
+    )
+      ? null
+      : value;
+  }
+
+  const s =
+    String(
+      value
+    );
+
+  if (
+    /^\d{4}-\d{2}-\d{2}$/.test(
+      s
+    )
+  ) {
+
+    const parts =
+      s
+        .split('-')
+        .map(Number);
+
+    return new Date(
+      parts[0],
+      parts[1] - 1,
+      parts[2]
+    );
+  }
+
+  const d =
+    new Date(s);
+
+  return isNaN(
+    d.getTime()
+  )
+    ? null
+    : d;
+}
+
+
+function dateValue_(
+  value
+) {
+
+  if (!value) {
+    return 0;
+  }
+
+  const d =
+    asDate_(
+      value
+    );
+
+  return d
+    ? d.getTime()
+    : 0;
+}
+
+
+/* ============================================================
+   AUDITORÍA
+   ============================================================ */
+
+function registrarAuditoria_(
+  accion,
+  row,
+  detalle
+) {
+
+  const ss =
+    getSpreadsheet_();
+
+  const sh =
+    ss.getSheetByName(
+      ZIMA.SHEET_AUDITORIA
+    );
+
+  if (!sh) {
+    return;
+  }
+
+  const email =
+    obtenerUsuario_();
+
+  sh.appendRow([
+
+    new Date(),
+
+    accion,
+
+    row.id ||
+      '',
+
+    row.codigo ||
+      '',
+
+    row.usuario ||
+      '',
+
+    detalle ||
+      '',
+
+    email
+
+  ]);
+}
+
+
+/* ============================================================
+   SOPORTE EN LINEA
+   ============================================================ */
+
+const TICKET_HEADERS = ['id','requestId','fecha','usuario','nombre','peaje','email','categoria','prioridad','titulo','mensaje','estado','respuesta','updatedAt','conversacion'];
+
+function hojaTickets_() {
+  const ss = getSpreadsheet_();
+  let sh = ss.getSheetByName('ZIMATICKETS');
+  if (!sh) sh = ss.insertSheet('ZIMATICKETS');
+  if (!sh.getLastRow()) {
+    sh.appendRow(TICKET_HEADERS);
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, TICKET_HEADERS.length).setFontWeight('bold');
+  }
+  sh.getRange(1, 15, 1, 1).setValues([['conversacion']]);
+  return sh;
+}
+
+function leerTickets_(sh) {
+  if (sh.getLastRow() < 2) return [];
+  return sh.getRange(2,1,sh.getLastRow()-1,TICKET_HEADERS.length).getValues().map(function(row) {
+    const item = {};
+    TICKET_HEADERS.forEach(function(key,index) { item[key] = row[index] instanceof Date ? row[index].toISOString() : row[index]; });
+    try { item.conversacion = JSON.parse(item.conversacion || '[]'); } catch (_) { item.conversacion = []; }
+    if (!Array.isArray(item.conversacion)) item.conversacion = [];
+    if (!item.conversacion.length && item.respuesta) {
+      item.conversacion.push({usuario:'Soporte',rol:'ADMIN',mensaje:item.respuesta,fecha:item.updatedAt || item.fecha});
+    }
+    return item;
+  });
+}
+
+function listarTickets_(datos) {
+  const ctx = obtenerContextoUsuario_(datos);
+  if (!ctx.ok) return ctx;
+  const admin = puedeGestionarSoporte_(ctx.sesion);
+  const sh = getSpreadsheet_().getSheetByName('ZIMATICKETS');
+  const rows = (sh ? leerTickets_(sh) : []).filter(function(row) {
+    return admin || String(row.usuario).trim().toLowerCase() === String(ctx.sesion.usuario).trim().toLowerCase();
+  }).reverse().map(function(row) { delete row.requestId; return row; });
+  return {ok:true,rows:rows,admin:admin};
+}
+
+function crearTicket_(datos) {
+  const ctx = obtenerContextoUsuario_(datos);
+  if (!ctx.ok) return ctx;
+  const titulo = String(datos.titulo || '').trim();
+  const mensaje = String(datos.mensaje || '').trim();
+  const email = String(datos.email || ctx.sesion.email || '').trim();
+  const categoria = String(datos.categoria || 'OTRO');
+  const prioridad = String(datos.prioridad || 'NORMAL');
+  const requestId = String(datos.requestId || '').trim();
+  if (titulo.length < 5 || titulo.length > 120) throw Error('El asunto debe tener entre 5 y 120 caracteres.');
+  if (mensaje.length < 15 || mensaje.length > 6000) throw Error('Describa su caso con entre 15 y 6000 caracteres.');
+  if (!emailValido_(email)) throw Error('Ingrese un correo de contacto válido.');
+  if (['ACCESO','PLANILLAS','INFORMES','OTRO'].indexOf(categoria) < 0 || ['NORMAL','ALTA'].indexOf(prioridad) < 0) throw Error('Categoría o prioridad no válida.');
+  if (!/^[a-zA-Z0-9-]{8,100}$/.test(requestId)) throw Error('Falta la identificación del envío. Recargue el portal.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  let ticket;
+  try {
+    const sh = hojaTickets_();
+    const anterior = leerTickets_(sh).find(function(row) { return row.requestId === requestId && String(row.usuario).toLowerCase() === String(ctx.sesion.usuario).toLowerCase(); });
+    if (anterior) return {ok:true,id:anterior.id,yaRegistrado:true};
+    ticket = {id:'ZT-'+Utilities.getUuid().toUpperCase(),requestId:requestId,fecha:new Date().toISOString(),usuario:ctx.sesion.usuario,nombre:ctx.sesion.nombre || '',peaje:ctx.sesion.peaje || '',email:email,categoria:categoria,prioridad:prioridad,titulo:titulo,mensaje:mensaje,estado:'ABIERTO',respuesta:'',updatedAt:new Date().toISOString()};
+    sh.appendRow(TICKET_HEADERS.map(function(key) {
+      const value = String(ticket[key] || '');
+      return /^[=+@-]/.test(value) ? "'"+value : value;
+    }));
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  try {
+    const destino = obtenerEmailNotificacion_(ctx.sesion);
+    if (!destino) throw Error('No hay correo de soporte configurado.');
+    MailApp.sendEmail({
+      to:destino,replyTo:email,subject:'[ZimaTicket] '+ticket.id+' · '+titulo,
+      body:['Nuevo ZimaTicket',ticket.id,'Usuario: '+ticket.usuario,'Peaje: '+ticket.peaje,'Contacto: '+email,'Categoría: '+categoria,'Prioridad: '+prioridad,'Asunto: '+titulo,'',mensaje].join('\n')
+    });
+    return {ok:true,id:ticket.id,correoEnviado:true};
+  } catch (e) {
+    console.error(errorMessage_(e));
+    return {ok:true,id:ticket.id,correoEnviado:false,mensaje:'El ticket quedó registrado. El correo no pudo enviarse; el administrador puede consultarlo en ZimaTicket.'};
+  }
+}
+
+function actualizarTicket_(datos) {
+  const ctx = obtenerContextoUsuario_(datos);
+  if (!ctx.ok) return ctx;
+  const admin = puedeGestionarSoporte_(ctx.sesion);
+  const respuesta = String(datos.respuesta || '').trim();
+  const requestId = String(datos.requestId || '').trim();
+  if (respuesta.length > 6000) throw Error('La respuesta no puede superar 6000 caracteres.');
+  if (!admin && !respuesta) throw Error('Escriba una respuesta.');
+  if (!admin && !/^[a-zA-Z0-9-]{8,100}$/.test(requestId)) throw Error('Falta la identificación del envío.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = hojaTickets_();
+    const rows = leerTickets_(sh);
+    const index = rows.findIndex(function(row) { return String(row.id) === String(datos.id); });
+    if (index < 0) throw Error('Ticket no encontrado.');
+    const ticket = rows[index];
+    if (!admin && String(ticket.usuario).trim().toLowerCase() !== String(ctx.sesion.usuario).trim().toLowerCase()) {
+      return {ok:false,error:'No tiene permiso para responder este ticket.'};
+    }
+    const conversacion = ticket.conversacion;
+    if (requestId && conversacion.some(function(m) { return m.requestId === requestId && m.usuario === ctx.sesion.usuario; })) {
+      return {ok:true,yaRegistrado:true};
+    }
+    const estado = admin ? String(datos.estado || ticket.estado) : 'ABIERTO';
+    if (['ABIERTO','EN_PROCESO','RESUELTO'].indexOf(estado) < 0) throw Error('Estado no válido.');
+    if (admin && estado === 'RESUELTO' && !respuesta && !ticket.respuesta) throw Error('Escriba la solución antes de resolver el ticket.');
+    const fecha = new Date().toISOString();
+    if (respuesta) conversacion.push({usuario:ctx.sesion.usuario,nombre:ctx.sesion.nombre || '',rol:ctx.sesion.rol,mensaje:respuesta,fecha:fecha,requestId:requestId});
+    // Google Sheets admite hasta 50.000 caracteres por celda.
+    const historial = JSON.stringify(conversacion);
+    if (historial.length > 49000) throw Error('La conversación alcanzó su límite. Cree un nuevo ticket para continuar.');
+    const ultimaRespuesta = admin && respuesta ? respuesta : ticket.respuesta || '';
+    sh.getRange(index+2,12,1,4).setValues([[estado,/^[=+@-]/.test(ultimaRespuesta)?"'"+ultimaRespuesta:ultimaRespuesta,fecha,historial]]);
+    SpreadsheetApp.flush();
+    registrarAuditoria_('TICKET_UPDATE',{id:ticket.id,usuario:ctx.sesion.usuario},'Ticket actualizado · Estado: '+estado);
+    return {ok:true};
+  } finally { lock.releaseLock(); }
+}
+
+
+function recortarSoporte_(
+  value,
+  max
+) {
+
+  value =
+    String(
+      value == null
+        ? ''
+        : value
+    );
+
+  max =
+    max ||
+    6000;
+
+  if (value.length <= max) {
+    return value;
+  }
+
+  return value.substring(0, max) +
+    '\n...[recortado]';
+}
+
+
+function registrarSoporte_(
+  data
+) {
+
+  data =
+    data ||
+    {};
+
+  let contexto =
+    null;
+
+  try {
+    contexto =
+      obtenerContextoUsuario_(
+        data
+      );
+  } catch (e) {
+    contexto =
+      null;
+  }
+
+  const sesion =
+    contexto &&
+    contexto.ok
+      ? contexto.sesion
+      : {
+        usuario:
+          data.usuario ||
+          data.user ||
+          '',
+
+        nombre:
+          data.nombre ||
+          data.name ||
+          '',
+
+        rol:
+          data.rol ||
+          data.role ||
+          '',
+
+        peaje:
+          data.peaje ||
+          ''
+      };
+
+  const fecha =
+    Utilities.formatDate(
+      new Date(),
+      Session.getScriptTimeZone(),
+      'yyyy-MM-dd HH:mm:ss'
+    );
+
+  const tipo =
+    String(
+      data.tipo ||
+      data.type ||
+      'manual'
+    ).trim();
+
+  const titulo =
+    String(
+      data.titulo ||
+      data.title ||
+      'Solicitud de soporte'
+    ).trim();
+
+  const mensaje =
+    recortarSoporte_(
+      data.mensaje ||
+      data.message ||
+      data.error ||
+      ''
+    );
+
+  const captura =
+    recortarSoporte_(
+      data.captura ||
+      data.capture ||
+      data.detalle ||
+      ''
+    );
+
+  const pagina =
+    String(
+      data.pagina ||
+      data.page ||
+      ''
+    ).trim();
+
+  const navegador =
+    String(
+      data.navegador ||
+      data.userAgent ||
+      ''
+    ).trim();
+
+  try {
+    const sh =
+      prepararHojaSoporte_(
+        getSpreadsheet_()
+      );
+
+    sh.appendRow([
+      new Date(),
+      tipo,
+      titulo,
+      mensaje,
+      pagina,
+      sesion.usuario || '',
+      sesion.nombre || '',
+      sesion.rol || '',
+      sesion.peaje || '',
+      navegador,
+      captura,
+      'ABIERTO'
+    ]);
+  } catch (e) {
+    console.error(
+      'No fue posible guardar el soporte en hoja: ' +
+      errorMessage_(
+        e
+      )
+    );
+  }
+
+  const asunto =
+    'ZIMA 360 - Soporte ' +
+    tipo.toUpperCase() +
+    ' - ' +
+    titulo;
+
+  const html =
+    '<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.45">' +
+    '<div style="border-left:5px solid #f4c20d;padding:4px 0 4px 14px;margin-bottom:16px">' +
+    '<div style="font-size:12px;color:#6b7280;font-weight:bold;letter-spacing:1px;text-transform:uppercase">ZIMA 360</div>' +
+    '<div style="font-size:20px;font-weight:800;color:#111827">Reporte de soporte en linea</div>' +
+    '</div>' +
+    '<table style="border-collapse:collapse;width:100%;max-width:760px">' +
+    filaHtmlPlanillaPdf_('Fecha', fecha) +
+    filaHtmlPlanillaPdf_('Tipo', tipo) +
+    filaHtmlPlanillaPdf_('Titulo', titulo) +
+    filaHtmlPlanillaPdf_('Mensaje', mensaje) +
+    filaHtmlPlanillaPdf_('Pagina', pagina) +
+    filaHtmlPlanillaPdf_('Usuario', sesion.usuario || '') +
+    filaHtmlPlanillaPdf_('Nombre', sesion.nombre || '') +
+    filaHtmlPlanillaPdf_('Rol', sesion.rol || '') +
+    filaHtmlPlanillaPdf_('Peaje', sesion.peaje || '') +
+    filaHtmlPlanillaPdf_('Navegador', navegador) +
+    '</table>' +
+    '<p style="margin:18px 0 8px;color:#4b5563"><b>Captura tecnica del error</b></p>' +
+    '<pre style="white-space:pre-wrap;background:#f6f8fb;border:1px solid #d8dee8;padding:12px;border-radius:6px;max-width:760px">' +
+    htmlEscape_(
+      captura ||
+      'Sin captura tecnica.'
+    ) +
+    '</pre>' +
+    '</div>';
+
+  const texto =
+    [
+      'ZIMA 360 - Reporte de soporte',
+      'Fecha: ' + fecha,
+      'Tipo: ' + tipo,
+      'Titulo: ' + titulo,
+      'Mensaje: ' + mensaje,
+      'Pagina: ' + pagina,
+      'Usuario: ' + (sesion.usuario || ''),
+      'Nombre: ' + (sesion.nombre || ''),
+      'Rol: ' + (sesion.rol || ''),
+      'Peaje: ' + (sesion.peaje || ''),
+      'Navegador: ' + navegador,
+      '',
+      'Captura tecnica:',
+      captura
+    ].join('\n');
+
+  const destinatarios =
+    obtenerEmailsUsuariosNotificacion_(
+      sesion
+    );
+
+  if (!destinatarios.length) {
+    return {
+      ok: false,
+      error:
+        'No hay correos de soporte configurados.'
+    };
+  }
+
+  MailApp.sendEmail({
+    to:
+      destinatarios.join(','),
+
+    subject:
+      asunto.substring(0, 240),
+
+    body:
+      texto,
+
+    htmlBody:
+      html
+  });
+
+  return {
+    ok: true,
+    enviadoA:
+      destinatarios.join(','),
+    fecha:
+      fecha
+  };
+}
+
+
+function listarSoporte_(
+  params
+) {
+
+  params =
+    params ||
+    {};
+
+  const contexto =
+    obtenerContextoUsuario_(
+      params
+    );
+
+  if (!contexto.ok) {
+    return contexto;
+  }
+
+  if (
+    !puedeGestionarSoporte_(
+      contexto.sesion
+    )
+  ) {
+    return {
+      ok: false,
+      error:
+        'Solo un administrador puede consultar soporte.'
+    };
+  }
+
+  const sh =
+    prepararHojaSoporte_(
+      getSpreadsheet_()
+    );
+
+  const lastRow =
+    sh.getLastRow();
+
+  if (lastRow < 2) {
+    return {
+      ok: true,
+      rows: [],
+      total: 0
+    };
+  }
+
+  const values =
+    sh
+      .getRange(
+        2,
+        1,
+        lastRow - 1,
+        ZIMA.SOPORTE_HEADERS.length
+      )
+      .getValues();
+
+  const rows =
+    values
+      .map(function(row, index) {
+        const item = {
+          rowNumber:
+            index + 2
+        };
+
+        ZIMA.SOPORTE_HEADERS.forEach(function(header, colIndex) {
+          const value =
+            row[colIndex];
+
+          item[header] =
+            value instanceof Date
+              ? value.toISOString()
+              : value;
+        });
+
+        return item;
+      })
+      .reverse();
+
+  return {
+    ok: true,
+    rows:
+      rows,
+    total:
+      rows.length
+  };
+}
+
+
+/* ============================================================
+   NOTIFICACIONES DE SEGUIMIENTO
+   ============================================================ */
+
+function emailValido_(
+  value
+) {
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    String(
+      value ||
+      ''
+    ).trim()
+  );
+}
+
+
+function extraerEmails_(
+  value
+) {
+
+  const emails = [];
+
+  String(
+    value ||
+    ''
+  )
+    .split(/[,\s;]+/)
+    .forEach(function(email) {
+
+      email =
+        String(
+          email ||
+          ''
+        ).trim();
+
+      if (
+        emailValido_(
+          email
+        ) &&
+        emails.indexOf(email) === -1
+      ) {
+        emails.push(email);
+      }
+    });
+
+  return emails;
+}
+
+
+function obtenerEmailsUsuariosNotificacion_(
+  sesion
+) {
+
+  const emails = [];
+
+  const agregar = function(value) {
+
+    extraerEmails_(
+      value
+    ).forEach(function(email) {
+      if (emails.indexOf(email) === -1) {
+        emails.push(email);
+      }
+    });
+  };
+
+  agregar(
+    obtenerValorConfig_(
+      'CORREOS_NOTIFICACION'
+    ) ||
+    'sistemaplanillaszima@gmail.com'
+  );
+
+  return emails;
+}
+
+
+function obtenerEmailNotificacion_(
+  sesion
+) {
+
+  return obtenerEmailsUsuariosNotificacion_(
+    sesion
+  ).join(',');
+}
+
+
+// Informa el estado de una cuenta a administración. Nunca incluye contraseñas.
+function notificarSeguimientoAcceso_(datos) {
+  datos = datos || {};
+  try {
+    const usuario = String(datos.usuario || '').trim();
+    const evento = String(datos.evento || 'SEGUIMIENTO').trim().toUpperCase();
+    if (!usuario) return {ok:false, enviado:false, error:'Falta el usuario.'};
+
+    // Evita correos repetidos por intentos sucesivos de inicio de sesión.
+    const cache = CacheService.getScriptCache();
+    const clave = 'ZIMA_ACCESS_MAIL_' + (usuario + '_' + evento).toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    if (cache.get(clave)) return {ok:true, enviado:false, omitido:true};
+
+    const destinatarios = obtenerEmailsUsuariosNotificacion_(null);
+    if (!destinatarios.length) return {ok:false, enviado:false, error:'No hay destinatarios configurados.'};
+    const fecha = Utilities.formatDate(new Date(), 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
+    const estado = String(datos.estado || 'SIN ESTADO').trim().toUpperCase();
+    const vencimiento = datos.venceContrasena
+      ? Utilities.formatDate(new Date(datos.venceContrasena), 'America/Bogota', 'yyyy-MM-dd')
+      : 'No aplica';
+    const asunto = 'ZIMA 360 - Seguimiento de acceso - ' + usuario + ' - ' + evento;
+    const lineas = [
+      'Seguimiento de cuenta ZIMA 360', '',
+      'Evento: ' + evento,
+      'Usuario: ' + usuario,
+      'Nombre: ' + String(datos.nombre || usuario),
+      'Rol: ' + String(datos.rol || ''),
+      'Peaje: ' + String(datos.peaje || ''),
+      'Estado de la cuenta: ' + estado,
+      'Cambio de contraseña pendiente: ' + (evento === 'CAMBIO_PENDIENTE' ? 'Sí' : 'No'),
+      'Fecha límite / vencimiento: ' + vencimiento,
+      'Detalle: ' + String(datos.detalle || ''),
+      'Fecha del evento (Bogotá): ' + fecha,
+      '',
+      'Por seguridad, este correo no contiene la contraseña ni su hash.'
+    ];
+    const filas = [
+      ['Evento', evento], ['Usuario', usuario], ['Nombre', datos.nombre || usuario],
+      ['Rol', datos.rol || ''], ['Peaje', datos.peaje || ''], ['Estado de la cuenta', estado],
+      ['Cambio de contraseña pendiente', evento === 'CAMBIO_PENDIENTE' ? 'Sí' : 'No'],
+      ['Fecha límite / vencimiento', vencimiento], ['Detalle', datos.detalle || ''],
+      ['Fecha del evento (Bogotá)', fecha]
+    ].map(function(fila) { return filaHtmlPlanillaPdf_(fila[0], fila[1]); }).join('');
+    const html = '<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.5;max-width:680px">' +
+      '<h2 style="color:#103b70">Seguimiento de cuenta ZIMA 360</h2>' +
+      '<table style="border-collapse:collapse;width:100%">' + filas + '</table>' +
+      '<p style="padding:12px;background:#fff7df;border-radius:8px">Por seguridad, este correo no contiene la contraseña ni su hash.</p></div>';
+    MailApp.sendEmail({to:destinatarios.join(','),subject:asunto,body:lineas.join('\n'),htmlBody:html});
+    cache.put(clave, '1', 43200);
+    return {ok:true,enviado:true,destinatarios:destinatarios.join(',')};
+  } catch (e) {
+    console.error('No fue posible enviar seguimiento de acceso: ' + errorMessage_(e));
+    return {ok:false,enviado:false,error:errorMessage_(e)};
+  }
+}
+
+
+// Resumen diario para administración: cuentas inactivas y cambios pendientes.
+function enviarResumenSeguimientoAccesos() {
+  try {
+    const usuarios = obtenerUsuariosDesdeHoja_(prepararHojaUsuarios_(getSpreadsheet_()));
+    const resumen = usuarios.map(function(usuario) {
+      const politica = estadoContrasena_(usuario);
+      return {
+        usuario: String(usuario.USUARIO || ''),
+        nombre: String(usuario.NOMBRE || usuario.USUARIO || ''),
+        rol: String(usuario.ROL || ''),
+        peaje: String(usuario.PEAJE || ''),
+        estado: String(usuario.ESTADO || 'SIN ESTADO').trim().toUpperCase(),
+        pendiente: politica.requiereCambioContrasena,
+        vence: politica.venceContrasena
+      };
+    }).filter(function(usuario) {
+      return usuario.estado !== 'ACTIVO' || usuario.pendiente;
+    });
+
+    if (!resumen.length) return {ok:true,enviado:false,mensaje:'No hay cuentas inactivas ni cambios pendientes.'};
+    const destinatarios = obtenerEmailsUsuariosNotificacion_(null);
+    if (!destinatarios.length) return {ok:false,enviado:false,error:'No hay destinatarios configurados.'};
+    const fecha = Utilities.formatDate(new Date(), 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
+    const encabezado = ['Usuario','Nombre','Rol','Peaje','Estado','Cambio pendiente','Vencimiento'];
+    const lineas = ['Seguimiento diario de accesos ZIMA 360', 'Generado (Bogotá): ' + fecha, '', encabezado.join(' | ')];
+    resumen.forEach(function(usuario) {
+      const vence = usuario.vence ? Utilities.formatDate(new Date(usuario.vence), 'America/Bogota', 'yyyy-MM-dd') : 'No aplica';
+      lineas.push([usuario.usuario,usuario.nombre,usuario.rol,usuario.peaje,usuario.estado,usuario.pendiente ? 'Sí' : 'No',vence].join(' | '));
+    });
+    lineas.push('', 'Por seguridad, el reporte no incluye contraseñas ni hashes.');
+    const filas = resumen.map(function(usuario) {
+      const vence = usuario.vence ? Utilities.formatDate(new Date(usuario.vence), 'America/Bogota', 'yyyy-MM-dd') : 'No aplica';
+      return '<tr>' + [usuario.usuario,usuario.nombre,usuario.rol,usuario.peaje,usuario.estado,usuario.pendiente ? 'Sí' : 'No',vence].map(function(valor) {
+        return '<td style="border:1px solid #d8dee8;padding:8px">' + htmlEscape_(valor) + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    const html = '<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.5"><h2 style="color:#103b70">Seguimiento diario de accesos ZIMA 360</h2>' +
+      '<p>Generado (Bogotá): ' + htmlEscape_(fecha) + '</p><table style="border-collapse:collapse;width:100%"><thead><tr>' +
+      encabezado.map(function(titulo) { return '<th style="background:#edf3fa;border:1px solid #d8dee8;padding:8px;text-align:left">' + htmlEscape_(titulo) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + filas + '</tbody></table><p>Por seguridad, el reporte no incluye contraseñas ni hashes.</p></div>';
+    MailApp.sendEmail({to:destinatarios.join(','),subject:'ZIMA 360 - Resumen diario de accesos (' + resumen.length + ')',body:lineas.join('\n'),htmlBody:html});
+    return {ok:true,enviado:true,total:resumen.length,destinatarios:destinatarios.join(',')};
+  } catch (e) {
+    console.error('No fue posible enviar el resumen de accesos: ' + errorMessage_(e));
+    return {ok:false,enviado:false,error:errorMessage_(e)};
+  }
+}
+
+
+// Ejecutar una sola vez desde Apps Script y autorizar el envío de correos.
+function configurarSeguimientoDiarioAccesos() {
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'enviarResumenSeguimientoAccesos') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  ScriptApp.newTrigger('enviarResumenSeguimientoAccesos').timeBased().everyDays(1).atHour(8).create();
+  return {ok:true,mensaje:'Seguimiento diario configurado. La hora usa la zona horaria del proyecto de Apps Script.'};
+}
+
+
+function htmlEscape_(
+  value
+) {
+
+  return String(
+    value == null
+      ? ''
+      : value
+  )
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+
+function formatoMonedaCorreo_(
+  value
+) {
+
+  const numero =
+    number_(
+      value
+    );
+
+  return '$ ' +
+    numero
+      .toFixed(0)
+      .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+
+function nombreArchivoPlanillaPdf_(
+  row,
+  accion
+) {
+
+  const codigo =
+    String(
+      row &&
+      (
+        row.codigo ||
+        row.id
+      ) ||
+      'planilla'
+    )
+      .trim()
+      .replace(/[^a-z0-9_.-]/gi, '_');
+
+  return 'ZIMA_' +
+    String(
+      accion ||
+      'PLANILLA'
+    )
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_.-]/g, '_') +
+    '_' +
+    codigo +
+    '.pdf';
+}
+
+
+function filaHtmlPlanillaPdf_(
+  label,
+  value
+) {
+
+  return '<tr>' +
+    '<th>' +
+    htmlEscape_(
+      label
+    ) +
+    '</th>' +
+    '<td>' +
+    htmlEscape_(
+      value
+    ) +
+    '</td>' +
+    '</tr>';
+}
+
+
+function construirHtmlPlanillaPdf_(
+  row,
+  accion,
+  sesion,
+  detalle
+) {
+
+  row =
+    row ||
+    {};
+
+  sesion =
+    sesion ||
+    {};
+
+  const fechaPlanilla =
+    normalizeDateString_(
+      row.fecha
+    );
+
+  const fechaGeneracion =
+    Utilities.formatDate(
+      new Date(),
+      Session.getScriptTimeZone(),
+      'yyyy-MM-dd HH:mm:ss'
+    );
+
+  const filas = [
+    filaHtmlPlanillaPdf_('Codigo', row.codigo || ''),
+    filaHtmlPlanillaPdf_('ID', row.id || ''),
+    filaHtmlPlanillaPdf_('Peaje', row.peaje || ''),
+    filaHtmlPlanillaPdf_('Tipo de planilla', tipoPlanilla_(row)),
+    filaHtmlPlanillaPdf_('Razon', row.razon || ''),
+    filaHtmlPlanillaPdf_('Moneda', row.moneda || ''),
+    filaHtmlPlanillaPdf_('Lugar de entrega', row.lugarEntrega || ''),
+    filaHtmlPlanillaPdf_('Recibe', row.recibe || ''),
+    filaHtmlPlanillaPdf_('Ciudad', row.ciudad || ''),
+    filaHtmlPlanillaPdf_('Lugar de recibo', row.lugarRecibo || ''),
+    filaHtmlPlanillaPdf_('Fecha', fechaPlanilla),
+    filaHtmlPlanillaPdf_('Concepto', row.concepto || ''),
+    filaHtmlPlanillaPdf_('Total entregado', formatoMonedaCorreo_(row.total)),
+    filaHtmlPlanillaPdf_('Observacion valor', row.obsValor || ''),
+    filaHtmlPlanillaPdf_('Valor tula', formatoMonedaCorreo_(row.tula)),
+    filaHtmlPlanillaPdf_('Valor billetes', formatoMonedaCorreo_(row.billetes)),
+    filaHtmlPlanillaPdf_('Valor en letras', row.letras || ''),
+    filaHtmlPlanillaPdf_('Observaciones', row.observaciones || ''),
+    filaHtmlPlanillaPdf_('Entregado por', row.entregadoNombre || ''),
+    filaHtmlPlanillaPdf_('Firma entregado', row.entregadoFirma || ''),
+    filaHtmlPlanillaPdf_('Revisado por', row.revisadoNombre || ''),
+    filaHtmlPlanillaPdf_('Firma revisado', row.revisadoFirma || ''),
+    filaHtmlPlanillaPdf_('Estado', row.estado || ''),
+    filaHtmlPlanillaPdf_('Usuario responsable', sesion.usuario || row.usuario || ''),
+    filaHtmlPlanillaPdf_('Nombre responsable', sesion.nombre || ''),
+    filaHtmlPlanillaPdf_('Rol responsable', sesion.rol || ''),
+    filaHtmlPlanillaPdf_('Fecha de generacion', fechaGeneracion)
+  ].join('');
+
+  return '<!doctype html>' +
+    '<html><head><meta charset="UTF-8">' +
+    '<style>' +
+    '@page{size:letter;margin:22mm 16mm}' +
+    'body{font-family:Arial,sans-serif;color:#172033;font-size:12px}' +
+    '.watermark{position:fixed;top:35%;left:5%;width:90%;transform:rotate(-28deg);text-align:center;font-size:48px;font-weight:bold;line-height:1.4;letter-spacing:3px;color:#104149;opacity:.08;overflow-wrap:anywhere;pointer-events:none}' +
+    '.brand{border-bottom:4px solid #f4c20d;padding-bottom:12px;margin-bottom:18px}' +
+    '.kicker{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#6b7280;font-weight:bold}' +
+    'h1{font-size:22px;margin:5px 0 4px;color:#111827}' +
+    '.sub{color:#4b5563;line-height:1.45}' +
+    '.badge{display:inline-block;background:#111827;color:#fff;padding:6px 10px;border-radius:4px;font-size:11px;font-weight:bold;margin-top:8px}' +
+    'table{width:100%;border-collapse:collapse;margin-top:16px}' +
+    'th,td{border:1px solid #d8dee8;padding:8px 9px;vertical-align:top}' +
+    'th{width:32%;background:#f5f7fb;text-align:left;color:#374151}' +
+    '.footer{margin-top:18px;color:#6b7280;font-size:10px;line-height:1.5}' +
+    '</style></head><body>' +
+    '<div class="watermark" aria-hidden="true">' + htmlEscape_(row.codigo || '') + '<br>' + htmlEscape_(row.peaje || '') + '</div>' +
+    '<div class="brand">' +
+    '<div class="kicker">ZIMA 360 · Seguimiento de planillas</div>' +
+    '<h1>Planilla ' +
+    htmlEscape_(
+      row.codigo ||
+      row.id ||
+      ''
+    ) +
+    '</h1>' +
+    '<div class="sub">' +
+    htmlEscape_(
+      detalle ||
+      ''
+    ) +
+    '</div>' +
+    '<div class="badge">' +
+    htmlEscape_(
+      accion ||
+      'PLANILLA'
+    ) +
+    '</div>' +
+    '</div>' +
+    '<table>' +
+    filas +
+    '</table>' +
+    '<div class="footer">' +
+    'Este PDF fue generado automaticamente por ZIMA 360 como soporte del movimiento registrado.' +
+    '</div>' +
+    '</body></html>';
+}
+
+
+function crearPdfPlanilla_(
+  row,
+  accion,
+  sesion,
+  detalle
+) {
+
+  const html =
+    construirHtmlPlanillaPdf_(
+      row,
+      accion,
+      sesion,
+      detalle
+    );
+
+  const nombre =
+    nombreArchivoPlanillaPdf_(
+      row,
+      accion
+    );
+
+  return Utilities
+    .newBlob(
+      html,
+      'text/html',
+      nombre.replace(/\.pdf$/i, '.html')
+    )
+    .getAs(
+      MimeType.PDF
+    )
+    .setName(
+      nombre
+    );
+}
+
+
+function construirHtmlCorreoCambio_(
+  accion,
+  row,
+  sesion,
+  detalle,
+  fechaCambio
+) {
+
+  return '<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.45">' +
+    '<div style="border-left:5px solid #f4c20d;padding:4px 0 4px 14px;margin-bottom:16px">' +
+    '<div style="font-size:12px;color:#6b7280;font-weight:bold;letter-spacing:1px;text-transform:uppercase">ZIMA 360</div>' +
+    '<div style="font-size:20px;font-weight:800;color:#111827">Seguimiento de planilla</div>' +
+    '</div>' +
+    '<p>Se registr&oacute; una <b>' +
+    htmlEscape_(
+      accion
+    ) +
+    '</b> en el sistema.</p>' +
+    '<table style="border-collapse:collapse;width:100%;max-width:680px">' +
+    filaHtmlPlanillaPdf_('Detalle', detalle || '') +
+    filaHtmlPlanillaPdf_('Fecha del cambio', fechaCambio) +
+    filaHtmlPlanillaPdf_('Codigo', row.codigo || '') +
+    filaHtmlPlanillaPdf_('ID', row.id || '') +
+    filaHtmlPlanillaPdf_('Peaje', row.peaje || '') +
+    filaHtmlPlanillaPdf_('Fecha planilla', normalizeDateString_(row.fecha)) +
+    filaHtmlPlanillaPdf_('Estado', row.estado || '') +
+    filaHtmlPlanillaPdf_('Total', formatoMonedaCorreo_(row.total)) +
+    filaHtmlPlanillaPdf_('Usuario', sesion && sesion.usuario || '') +
+    filaHtmlPlanillaPdf_('Nombre', sesion && sesion.nombre || '') +
+    filaHtmlPlanillaPdf_('Rol', sesion && sesion.rol || '') +
+    '</table>' +
+    '<p style="margin-top:16px;color:#4b5563">Se adjunta una copia en PDF de la planilla.</p>' +
+    '</div>';
+}
+
+
+function construirHtmlCorreoIngreso_(
+  sesion,
+  fechaIngreso
+) {
+
+  sesion =
+    sesion ||
+    {};
+
+  return '<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.45">' +
+    '<div style="border-left:5px solid #f4c20d;padding:4px 0 4px 14px;margin-bottom:16px">' +
+    '<div style="font-size:12px;color:#6b7280;font-weight:bold;letter-spacing:1px;text-transform:uppercase">ZIMA 360</div>' +
+    '<div style="font-size:20px;font-weight:800;color:#111827">Ingreso a la plataforma</div>' +
+    '</div>' +
+    '<p>Se registr&oacute; un inicio de sesi&oacute;n correcto.</p>' +
+    '<table style="border-collapse:collapse;width:100%;max-width:680px">' +
+    filaHtmlPlanillaPdf_('Fecha de ingreso', fechaIngreso) +
+    filaHtmlPlanillaPdf_('Usuario', sesion.usuario || '') +
+    filaHtmlPlanillaPdf_('Nombre', sesion.nombre || '') +
+    filaHtmlPlanillaPdf_('Rol', sesion.rol || '') +
+    filaHtmlPlanillaPdf_('Peaje', sesion.peaje || '') +
+    filaHtmlPlanillaPdf_('Email perfil', sesion.email || '') +
+    '</table>' +
+    '</div>';
+}
+
+
+function notificarIngresoPlataforma_(
+  sesion
+) {
+
+  try {
+
+    const destino =
+      obtenerEmailNotificacion_(
+        sesion
+      );
+
+    if (!destino) {
+      return {
+        ok: false,
+        enviado: false,
+        error:
+          'No hay correos de notificación configurados.'
+      };
+    }
+
+    const zona =
+      Session.getScriptTimeZone();
+
+    const fechaIngreso =
+      Utilities.formatDate(
+        new Date(),
+        zona,
+        'yyyy-MM-dd HH:mm:ss'
+      );
+
+    const asunto =
+      'ZIMA 360 - Ingreso a la plataforma - ' +
+      (
+        sesion &&
+        sesion.usuario ||
+        ''
+      );
+
+    const lineas = [
+      'Ingreso a la plataforma ZIMA 360',
+      '',
+      'Fecha de ingreso: ' + fechaIngreso,
+      '',
+      'Usuario',
+      'Usuario: ' + (sesion && sesion.usuario || ''),
+      'Nombre: ' + (sesion && sesion.nombre || ''),
+      'Rol: ' + (sesion && sesion.rol || ''),
+      'Peaje: ' + (sesion && sesion.peaje || ''),
+      'Email perfil: ' + (sesion && sesion.email || '')
+    ];
+
+    MailApp.sendEmail({
+      to:
+        destino,
+
+      subject:
+        asunto,
+
+      body:
+        lineas.join('\n'),
+
+      htmlBody:
+        construirHtmlCorreoIngreso_(
+          sesion,
+          fechaIngreso
+        )
+    });
+
+    return {
+      ok: true,
+      enviado: true,
+      destinatarios:
+        destino
+    };
+
+  } catch (e) {
+
+    console.error(
+      'No fue posible enviar notificacion de ingreso: ' +
+      errorMessage_(
+        e
+      )
+    );
+
+    return {
+      ok: false,
+      enviado: false,
+      error:
+        'No fue posible enviar el correo de ingreso: ' +
+        errorMessage_(
+          e
+        )
+    };
+  }
+}
+
+
+function notificarCambioPlanilla_(
+  accion,
+  row,
+  sesion,
+  detalle
+) {
+
+  try {
+
+    const destino =
+      obtenerEmailNotificacion_(
+        sesion
+      );
+
+    if (!destino) {
+      return {
+        ok: false,
+        enviado: false,
+        error:
+          'No hay correos de notificación configurados. Complete CORREOS_NOTIFICACION en CONFIG o el EMAIL de un ADMIN/INTERVENTORIA activo.'
+      };
+    }
+
+    const zona =
+      Session.getScriptTimeZone();
+
+    const fechaCambio =
+      Utilities.formatDate(
+        new Date(),
+        zona,
+        'yyyy-MM-dd HH:mm:ss'
+      );
+
+    const fechaPlanilla =
+      normalizeDateString_(
+        row.fecha
+      );
+
+    const asunto =
+      'ZIMA 360 - ' +
+      accion +
+      ' de planilla ' +
+      (
+        row.codigo ||
+        row.id ||
+        ''
+      );
+
+    const lineas = [
+      'Seguimiento ZIMA 360',
+      '',
+      'Accion: ' + accion,
+      'Detalle: ' + (detalle || ''),
+      'Fecha del cambio: ' + fechaCambio,
+      '',
+      'Planilla',
+      'Codigo: ' + (row.codigo || ''),
+      'ID: ' + (row.id || ''),
+      'Peaje: ' + (row.peaje || ''),
+      'Fecha: ' + fechaPlanilla,
+      'Estado: ' + (row.estado || ''),
+      'Total: ' + number_(row.total),
+      '',
+      'Usuario responsable',
+      'Usuario: ' + (sesion && sesion.usuario || ''),
+      'Nombre: ' + (sesion && sesion.nombre || ''),
+      'Rol: ' + (sesion && sesion.rol || ''),
+      '',
+      'Se adjunta una copia en PDF de la planilla.'
+    ];
+
+    const pdf =
+      crearPdfPlanilla_(
+        row,
+        accion,
+        sesion,
+        detalle
+      );
+
+    MailApp.sendEmail({
+      to:
+        destino,
+
+      subject:
+        asunto,
+
+      body:
+        lineas.join('\n'),
+
+      htmlBody:
+        construirHtmlCorreoCambio_(
+          accion,
+          row,
+          sesion,
+          detalle,
+          fechaCambio
+        ),
+
+      attachments: [
+        pdf
+      ]
+    });
+
+    return {
+      ok: true,
+      enviado: true,
+      destinatarios:
+        destino
+    };
+
+  } catch (e) {
+
+    console.error(
+      'No fue posible enviar notificacion de planilla: ' +
+      errorMessage_(
+        e
+      )
+    );
+
+    return {
+      ok: false,
+      enviado: false,
+      error:
+        'No fue posible enviar el correo: ' +
+        errorMessage_(
+          e
+        )
+    };
+  }
+}
+
+
+/* ============================================================
+   USUARIO GOOGLE
+   ============================================================ */
+
+function obtenerUsuario_() {
+
+  try {
+
+    const email =
+      Session
+        .getActiveUser()
+        .getEmail();
+
+    if (email) {
+      return email;
+    }
+
+  } catch (e) {}
+
+  return 'Usuario ZIMA';
+}
+
+
+/* ============================================================
+   ACCESO A BASE DE DATOS
+   ============================================================ */
+
+function getSpreadsheet_() {
+
+  const id =
+    PropertiesService
+      .getScriptProperties()
+      .getProperty(
+        ZIMA.SPREADSHEET_PROPERTY
+      );
+
+  if (!id) {
+
+    throw new Error(
+      'ZIMA 360 no está configurado. Ejecute setupSistema() una vez.'
+    );
+  }
+
+  try {
+
+    return SpreadsheetApp.openById(
+      id
+    );
+
+  } catch (e) {
+
+    throw new Error(
+      'No se pudo abrir la hoja de ZIMA 360. Verifique los permisos.'
+    );
+  }
+}
+
+
+function getPlanillasSheet_() {
+
+  const ss =
+    getSpreadsheet_();
+
+  const sh =
+    ss.getSheetByName(
+      ZIMA.SHEET_PLANILLAS
+    );
+
+  if (!sh) {
+
+    throw new Error(
+      'No existe la hoja PLANILLAS. Ejecute setupSistema().'
+    );
+  }
+
+  // Agregar el nuevo encabezado sin modificar las 25 columnas existentes.
+  const tipoCol = headerIndex_('tipoPlanilla');
+  if (sh.getMaxColumns() < tipoCol) {
+    sh.insertColumnsAfter(sh.getMaxColumns(), tipoCol - sh.getMaxColumns());
+  }
+  if (sh.getLastColumn() < tipoCol || !sh.getRange(1, tipoCol).getValue()) {
+    sh.getRange(1, tipoCol).setValue('tipoPlanilla');
+  }
+  return sh;
+}
+
+
+/* ============================================================
+   PARSEO POST
+   ============================================================ */
+
+function parsePost_(e) {
+
+  if (!e) {
+    return {};
+  }
+
+  if (
+    e.postData &&
+    e.postData.contents
+  ) {
+
+    const raw =
+      String(
+        e.postData.contents
+      ).trim();
+
+    if (raw) {
+
+      try {
+
+        return JSON.parse(
+          raw
+        );
+
+      } catch (jsonError) {}
+    }
+  }
+
+  const params =
+    e.parameter ||
+    {};
+
+  const result = {};
+
+  Object.keys(
+    params
+  ).forEach(
+    function(key) {
+
+      result[key] =
+        params[key];
+
+    }
+  );
+
+  return result;
+}
+
+
+/* ============================================================
+   JSON
+   ============================================================ */
+
+function jsonOutput_(
+  obj,
+  callback
+) {
+
+  callback =
+    String(
+      callback || ''
+    ).trim();
+
+  if (
+    callback &&
+    /^[A-Za-z_$][0-9A-Za-z_$]*(?:\.[A-Za-z_$][0-9A-Za-z_$]*)*$/.test(callback)
+  ) {
+
+    return ContentService
+      .createTextOutput(
+        callback +
+        '(' +
+        JSON.stringify(obj) +
+        ');'
+      )
+      .setMimeType(
+        ContentService.MimeType.JAVASCRIPT
+      );
+  }
+
+  return ContentService
+    .createTextOutput(
+      JSON.stringify(
+        obj
+      )
+    )
+    .setMimeType(
+      ContentService.MimeType.JSON
+    );
+}
+
+
+/* ============================================================
+   URL DEL WEB APP
+   ============================================================ */
+
+function obtenerWebAppUrl_() {
+
+  try {
+    return ScriptApp.getService().getUrl() || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+
+/* ============================================================
+   ERROR
+   ============================================================ */
+
+function errorMessage_(
+  error
+) {
+
+  return error &&
+    error.message
+    ? error.message
+    : String(
+        error ||
+        'Error desconocido.'
+      );
+}
+
+
+/* ============================================================
+   CONFIGURAR SISTEMA
+   ============================================================ */
+
+function configurarSistemaUsuarios() {
+
+  const resultado =
+    setupSistema();
+
+  return {
+
+    ok: true,
+
+    mensaje:
+      'Sistema ZIMA 360 configurado correctamente.',
+
+    resultado:
+      resultado
+  };
+}
+
+
+/* ============================================================
+   PRUEBA DE BACKEND
+   ============================================================ */
+
+function pruebaBackend_() {
+
+  const setup =
+    setupSistema();
+
+  if (!setup.ok) {
+
+    throw new Error(
+      setup.error ||
+      'No se pudo configurar el sistema.'
+    );
+  }
+
+  const login =
+    autenticarUsuario(
+      'admin',
+      'Admin360'
+    );
+
+  if (!login.ok) {
+    throw new Error(
+      login.mensaje ||
+      'No fue posible iniciar sesión con el usuario de prueba.'
+    );
+  }
+
+  const prueba =
+    guardarPlanilla_({
+
+      action:
+        'save',
+
+      /*
+       * Para la prueba se usa la sesión real del admin.
+       */
+
+      token:
+        login.token,
+
+      codigo:
+        'PRUEBA-' +
+        new Date().getTime(),
+
+      peaje:
+        'PRUEBA',
+
+      razon:
+        'ZIMA SEGURIDAD',
+
+      moneda:
+        'COP - Peso colombiano',
+
+      lugarEntrega:
+        'CENTRO EFECTIVO',
+
+      recibe:
+        'TransBank',
+
+      ciudad:
+        'FRAGUA',
+
+      lugarRecibo:
+        'PEAJE FRAGUA',
+
+      fecha:
+        Utilities.formatDate(
+          new Date(),
+          Session.getScriptTimeZone(),
+          'yyyy-MM-dd'
+        ),
+
+      concepto:
+        'PRUEBA DE CONEXIÓN',
+
+      total:
+        8000000,
+
+      obsValor:
+        'Registro automático de prueba',
+
+      tula:
+        8000000,
+
+      billetes:
+        0,
+
+      letras:
+        'OCHO MILLONES DE PESOS M/CTE',
+
+      observaciones:
+        'Prueba técnica',
+
+      entregadoNombre:
+        'Prueba',
+
+      entregadoFirma:
+        '',
+
+      revisadoNombre:
+        '',
+
+      revisadoFirma:
+        '',
+
+      estado:
+        'BORRADOR'
+
+    });
+
+  Logger.log(
+    JSON.stringify(
+      prueba,
+      null,
+      2
+    )
+  );
+
+  return prueba;
+}
+
+
+/* ============================================================
+   PRUEBA DE LOGIN
+   ============================================================ */
+
+function pruebaLogin_() {
+
+  const resultado =
+    autenticarUsuario(
+      'admin',
+      'Admin360'
+    );
+
+  Logger.log(
+    JSON.stringify(
+      resultado,
+      null,
+      2
+    )
+  );
+
+  return resultado;
+}
+
+
+/* ============================================================
+   PRUEBA DE USUARIO
+   ============================================================ */
+
+function pruebaUsuario_(
+  usuario
+) {
+
+  const resultado =
+    buscarUsuario_(
+      usuario
+    );
+
+  if (resultado) {
+    delete resultado.CONTRASENA;
+  }
+
+  Logger.log(
+    JSON.stringify(
+      resultado,
+      null,
+      2
+    )
+  );
+
+  return resultado;
+}

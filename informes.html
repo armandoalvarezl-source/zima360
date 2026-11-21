@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="img/logo.png">
+  <title>ZIMA 360 | Informes mensuales</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="zima-ui-modern.css">
+  <style>
+    :root{--side:293px;--navy:#101827;--gold:#f7c600;--bg:#f5f7fa;--ink:#172235;--muted:#6d7b8d;--line:#e4e8ee;--white:#fff;--green:#15803d;--red:#b42318}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,Arial,sans-serif}
+    .app{min-height:100vh}
+    .sidebar{position:fixed;inset:0 auto 0 0;width:var(--side);background:linear-gradient(180deg,#101827,#0d1726);color:#fff;padding:28px 16px 18px;display:flex;flex-direction:column;z-index:10}
+    .brand-block{display:flex;align-items:center;gap:12px;padding:0 8px 24px}
+    .brand-logo{width:44px;height:44px;border-radius:10px;background:#fff;display:grid;place-items:center;overflow:hidden}
+    .brand-logo img{width:38px;height:38px;object-fit:contain}
+    .brand-copy strong{display:block;font-family:Manrope,sans-serif;font-size:18px}
+    .brand-copy span,.branch-label,.nav-title,.sidebar-bottom{color:#8490a0;font-size:10px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase}
+    .branch-card{border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px;margin-bottom:18px}
+    .branch-name{font-weight:800;margin-top:4px}
+    .main-nav{display:grid;gap:5px}
+    .nav-title{padding:0 12px 10px}
+    .nav-item{display:flex;align-items:center;gap:13px;min-height:54px;padding:13px 14px;border-radius:8px;color:#c7d0db;text-decoration:none;font-size:14px;font-weight:700}
+    .nav-item:hover{background:rgba(255,255,255,.06);color:#fff}
+    .nav-item.active{background:rgba(255,255,255,.09);color:#fff;border-left:3px solid var(--gold);padding-left:11px}
+    .nav-item.active .nav-icon{color:var(--gold)}
+    .nav-icon{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center}
+    .nav-icon svg{width:19px;height:19px}
+    .sidebar-bottom{margin-top:auto;border-top:1px solid rgba(255,255,255,.09);padding:17px 12px 0}
+    .main{margin-left:var(--side);min-height:100vh}
+    .topbar{height:74px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:5}
+    .breadcrumb{font-size:13px;color:var(--muted);font-weight:700}
+    .status{display:flex;align-items:center;gap:8px;color:#475569;font-size:13px;font-weight:700}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+    .session-user{display:flex;align-items:center;gap:10px}
+    .avatar{width:38px;height:38px;border-radius:50%;background:#111827;color:#fff;display:grid;place-items:center;font-weight:800;overflow:hidden}
+    .avatar.profile-trigger{border:0;cursor:pointer;padding:0}
+    .avatar.profile-trigger:hover{box-shadow:0 0 0 3px rgba(0,55,71,.16)}
+    .avatar img{width:100%;height:100%;object-fit:cover;display:block}
+    .user-meta strong,.user-meta span{display:block}
+    .user-meta strong{font-size:13px}.user-meta span{font-size:11px;color:var(--muted)}
+    .icon-btn{width:38px;height:38px;border:1px solid var(--line);background:#fff;border-radius:8px;display:grid;place-items:center;cursor:pointer}
+    .page{padding:28px}
+    .hero{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:22px}
+    .kicker{font-size:11px;font-weight:900;letter-spacing:1.2px;color:#64748b}
+    h1{font-family:Manrope,sans-serif;font-size:34px;line-height:1.1;margin:5px 0 6px}
+    p{margin:0;color:#667085}
+    .actions,.filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .btn,.field{height:42px;border:1px solid var(--line);border-radius:8px;background:#fff;color:#172235;font-weight:800;padding:0 13px}
+    .btn{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+    .btn.primary{background:#101827;color:#fff;border-color:#101827}
+    .btn.gold{background:var(--gold);border-color:var(--gold);color:#111827}
+    .field{min-width:180px}
+    .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+    .metric{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px}
+    .metric span{display:block;color:#64748b;font-size:12px;font-weight:800;text-transform:uppercase}
+    .metric strong{display:block;font-size:24px;margin-top:8px}
+    .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
+    .panel{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+    .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)}
+    .panel-head strong{font-family:Manrope,sans-serif;font-size:18px}
+    .table-wrap{overflow:auto}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:12px 14px;border-bottom:1px solid var(--line);font-size:13px;text-align:left;white-space:nowrap}
+    th{background:#f8fafc;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+    td.money{text-align:right;font-weight:800}
+    .badge{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;background:#eef2f7;color:#334155;font-size:11px;font-weight:900}
+    .badge.entregada{background:#e8f7ee;color:#166534}.badge.cerrada{background:#eaf1ff;color:#1d4ed8}.badge.anulada{background:#feecec;color:#991b1b}
+    .empty{padding:28px;text-align:center;color:#64748b}
+    .notice{margin:0 0 16px;padding:12px 14px;border-radius:8px;background:#fff7d6;border:1px solid #f6d86a;color:#6b5200;font-weight:700}
+    .notice.error{background:#fff1f1;border-color:#f5b5b5;color:#8a1f1f}
+    .footer{display:flex;gap:12px;color:#98a2b3;font-size:12px;margin-top:18px}
+    .profile-modal{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.42);padding:18px}
+    .profile-modal.open{display:flex}
+    .profile-dialog{width:min(520px,100%);background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,.22);overflow:hidden}
+    .profile-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:18px 20px;border-bottom:1px solid var(--line)}
+    .profile-head h2{margin:0;font-size:18px}
+    .profile-head p{margin:5px 0 0;color:#667085;font-size:12px;line-height:1.45}
+    .profile-close{width:34px;height:34px;border:1px solid var(--line);background:#fff;border-radius:6px;display:grid;place-items:center;cursor:pointer}
+    .profile-form{padding:18px 20px 20px;display:grid;gap:12px}
+    .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .profile-field{display:grid;gap:6px}
+    .profile-field label{font-size:10px;font-weight:900;color:#4b5563;text-transform:uppercase}
+    .profile-field input{height:40px;border:1px solid #cfd6df;border-radius:4px;padding:0 11px;background:#fff;color:#111;font-weight:600}
+    .profile-field input[type=file]{height:auto;padding:9px}
+    .profile-photo-row{display:flex;align-items:center;gap:12px}
+    .profile-preview{width:56px;height:56px;border-radius:50%;background:#111827;color:#fff;display:grid;place-items:center;font-weight:900;overflow:hidden;flex:0 0 56px}
+    .profile-preview img{width:100%;height:100%;object-fit:cover;display:block}
+    .profile-error{min-height:16px;color:#8a1f1f;font-size:12px;font-weight:700}
+    .profile-actions{display:flex;justify-content:flex-end;gap:9px}
+    .print-cover{display:none}
+    body.reports-page .page{max-width:1280px;margin:0 auto}
+    body.reports-page .hero{background:#fff;border:1px solid var(--line);border-left:5px solid #003747;border-radius:6px;padding:20px 22px;margin-bottom:18px;box-shadow:0 1px 5px rgba(0,0,0,.12)}
+    body.reports-page .kicker{color:#003747;letter-spacing:.08em}
+    body.reports-page h1{font-size:28px;margin-top:4px}
+    body.reports-page .hero p{max-width:640px;font-size:14px;line-height:1.45;color:#4b5563}
+    body.reports-page .actions{justify-content:flex-end}
+    body.reports-page .btn{height:38px;border-radius:3px!important;box-shadow:none!important}
+    body.reports-page .btn.primary{background:#003747!important;border-color:#003747!important;color:#fff!important}
+    body.reports-page .btn.gold{background:#25d6ad!important;border-color:#25d6ad!important;color:#062229!important}
+    body.reports-page .field{height:38px;border-radius:3px!important;min-width:165px}
+    body.reports-page .metrics{grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;margin-bottom:14px}
+    body.reports-page .metric{position:relative;min-height:104px;border-radius:4px!important;padding:14px 16px;border-color:#dedede!important;box-shadow:0 1px 5px rgba(0,0,0,.12)!important;overflow:hidden}
+    body.reports-page .metric::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:#e7e7e7}
+    body.reports-page .metric:first-child::after{background:#25d6ad}
+    body.reports-page .metric:nth-child(2)::after{background:#ffb52d}
+    body.reports-page .metric span{font-size:11px;letter-spacing:.04em;color:#5d6670}
+    body.reports-page .metric strong{font-size:25px;line-height:1.1;color:#111}
+    body.reports-page .grid{grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:14px;align-items:start}
+    body.reports-page .panel{border-radius:4px!important;border-color:#dedede!important;box-shadow:0 1px 5px rgba(0,0,0,.12)!important}
+    body.reports-page .panel-head{min-height:50px;background:#fff;padding:13px 16px}
+    body.reports-page .panel-head strong{font-size:16px;color:#111}
+    body.reports-page .panel-head span{background:#efefef;border:1px solid #d6d6d6;border-radius:2px;padding:5px 8px;color:#111;font-size:12px;font-weight:700}
+    body.reports-page .table-wrap{max-height:280px;overflow:auto}
+    body.reports-page .page>section.panel .table-wrap{max-height:360px}
+    body.reports-page table{min-width:720px;table-layout:fixed}
+    body.reports-page .panel:nth-child(2) table{min-width:340px}
+    body.reports-page th{background:#f1f1f1!important;color:#111!important;font-size:11px;letter-spacing:0}
+    body.reports-page th{position:sticky;top:0;z-index:1}
+    body.reports-page td{color:#111}
+    body.reports-page th,body.reports-page td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    body.reports-page td.money{color:#111!important;font-size:13px}
+    body.reports-page tbody tr:hover td{background:#f7fbfc}
+    body.reports-page .badge{border-radius:2px;padding:5px 8px}
+    body.reports-page .empty{padding:32px 18px}
+    @media(min-width:1001px){
+      body.reports-page .main{height:100vh;overflow:hidden}
+      body.reports-page .page{height:calc(100vh - 74px);display:flex;flex-direction:column;overflow:hidden;padding-bottom:18px!important}
+      body.reports-page .hero,
+      body.reports-page .metrics,
+      body.reports-page .grid,
+      body.reports-page #msg{flex:0 0 auto}
+      body.reports-page .grid .table-wrap{max-height:175px}
+      body.reports-page .page>section.panel:last-of-type{flex:1 1 auto;min-height:220px;display:flex;flex-direction:column;margin-top:14px!important}
+      body.reports-page .page>section.panel:last-of-type .table-wrap{flex:1 1 auto;max-height:none;min-height:0}
+    }
+    @media(max-width:1000px){.sidebar{width:82px;padding:22px 10px}.brand-copy,.branch-card,.nav-title,.sidebar-bottom,.nav-item span:not(.nav-icon){display:none}.main{margin-left:82px}.metrics,.grid{grid-template-columns:1fr}}
+    @media(max-width:1100px){body.reports-page .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}body.reports-page .grid{grid-template-columns:1fr}}
+    @media(max-width:700px){.sidebar{inset:auto 0 0;width:100%;height:68px;padding:8px 10px;flex-direction:row}.brand-block,.sidebar-bottom{display:none}.main-nav{width:100%;display:flex;gap:4px}.nav-item{flex:1;justify-content:center;min-height:52px;padding:8px}.main{margin-left:0;padding-bottom:68px}.topbar{padding:0 14px}.user-meta{display:none}.page{padding:20px 14px}.hero{display:block}.actions{margin-top:14px}.metrics{grid-template-columns:1fr 1fr}body.reports-page .hero{padding:16px}body.reports-page .actions{display:grid;grid-template-columns:1fr;align-items:stretch}body.reports-page .actions .btn,body.reports-page .field{width:100%;justify-content:center}body.reports-page .metrics{grid-template-columns:1fr}body.reports-page h1{font-size:24px}.profile-grid{grid-template-columns:1fr}.profile-actions{flex-direction:column}.profile-actions .btn{width:100%;justify-content:center}}
+    @media print{
+      @page{size:letter landscape;margin:5mm}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+      html,body{width:auto!important;height:auto!important;overflow:visible!important}
+      body{background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;font-size:8.4px}
+      .sidebar,.topbar,.hero,.actions,.filters,.notice,.footer{display:none!important}
+      .main{margin:0!important;min-height:auto!important;width:100%!important;height:auto!important;overflow:visible!important}
+      .page{max-width:none!important;height:auto!important;display:block!important;overflow:visible!important;padding:0!important;background:#fff}
+      .print-cover{display:block;border:0;margin:0 0 2.5mm}
+      .print-head{display:grid;grid-template-columns:38mm 1fr 48mm;align-items:start;border:0;min-height:24mm}
+      .print-logo{display:grid;place-items:start;border:0;height:auto;padding-top:1mm}
+      .print-logo img{width:34mm;height:20mm;object-fit:contain}
+      .print-title{text-align:center;padding:2mm 5mm 0;color:#000}
+      .print-title::before{content:"Autopista Conexion Norte";display:block;font-size:12px;font-weight:700;margin-bottom:3mm;text-transform:uppercase}
+      .print-title strong{display:block;font-size:12px;font-family:Arial,Helvetica,sans-serif;font-weight:700;text-transform:uppercase}
+      .print-title span{display:block;font-size:10px;margin-top:2mm;text-transform:uppercase;letter-spacing:0;font-weight:700}
+      .print-code{height:auto;border:0;display:block;text-align:right;font-size:8px;font-weight:700;padding-top:1mm;line-height:1.45}
+      .print-code::before{content:"Fecha de generaci\00f3n: " attr(data-generated);display:block;font-weight:400}
+      .print-meta{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:0;border:0;margin-top:0}
+      .print-meta div{padding:0 2mm 1.5mm 0;border:0;font-size:10px}
+      .print-meta span{display:inline;font-size:10px;color:#000;text-transform:none;font-weight:700}
+      .print-meta span::after{content:": "}
+      .print-meta strong{font-weight:400}
+      .print-summary{display:grid;grid-template-columns:repeat(4,1fr);border:0.7pt solid #004e46;margin-top:1mm}
+      .print-summary div{padding:1.8mm 2mm;border-right:0.7pt solid #004e46;background:#d8d8d8;text-align:center}
+      .print-summary div:last-child{border-right:0}
+      .print-summary span{display:block;font-size:7.8px;text-transform:uppercase;color:#001c14;font-weight:700}
+      .print-summary strong{font-size:9px;color:#000}
+      .metrics{display:none}
+      .grid{display:grid!important;grid-template-columns:minmax(0,2fr) minmax(0,.9fr)!important;gap:2.5mm!important;align-items:start!important;margin-bottom:2.5mm!important}
+      body.reports-page table{min-width:0!important;width:100%!important;table-layout:fixed!important;border-collapse:collapse!important}
+      .panel{border:0!important;border-radius:0!important;margin:0 0 2.5mm!important;break-inside:auto;page-break-inside:auto;overflow:visible!important;box-shadow:none!important}
+      .grid .panel{break-inside:avoid;page-break-inside:avoid;margin-bottom:0!important}
+      .panel-head{padding:1.6mm 2mm;border:0.7pt solid #004e46;border-bottom:0;background:#7f7f7f!important;color:#001c14}
+      .panel-head strong{font-size:10px;font-family:Arial,Helvetica,sans-serif;text-transform:uppercase}
+      .panel-head span{font-size:8px;background:transparent!important;border:0!important;padding:0!important;color:#001c14!important}
+      .table-wrap{max-height:none!important;overflow:visible!important}
+      thead{display:table-header-group}
+      tfoot{display:table-footer-group}
+      tr{break-inside:avoid;page-break-inside:avoid}
+      th,td{padding:1.1mm 1.2mm;border:0.7pt solid #004e46!important;font-size:7.2px;line-height:1.16;white-space:normal!important;overflow-wrap:anywhere;word-break:normal;color:#000!important;vertical-align:top}
+      th{position:static!important;background:#a6a6a6!important;color:#001c14!important;font-size:7px;text-align:center;text-transform:uppercase}
+      td{background:#fff!important}
+      td:first-child,td:nth-child(2),td:nth-child(3){background:#d8d8d8!important;font-weight:700;color:#001c14!important}
+      td.money{text-align:right;font-weight:700}
+      .badge{border:0;background:transparent!important;color:#000!important;border-radius:0;padding:0;font-size:7.4px}
+      .report-table col{width:auto}
+      .peajes-table col:nth-child(1){width:24%}
+      .peajes-table col:nth-child(2){width:10%}
+      .peajes-table col:nth-child(3),
+      .peajes-table col:nth-child(4),
+      .peajes-table col:nth-child(5){width:16%}
+      .peajes-table col:nth-child(6),
+      .peajes-table col:nth-child(7){width:9%}
+      .estados-table col:nth-child(1){width:46%}
+      .estados-table col:nth-child(2){width:22%}
+      .estados-table col:nth-child(3){width:32%}
+      .detalle-table th,.detalle-table td{font-size:6.8px;padding:1mm .9mm}
+      .detalle-table col:nth-child(1){width:11%}
+      .detalle-table col:nth-child(2){width:10%}
+      .detalle-table col:nth-child(3){width:14%}
+      .detalle-table col:nth-child(4){width:15%}
+      .detalle-table col:nth-child(5){width:13%}
+      .detalle-table col:nth-child(6){width:10%}
+      .detalle-table col:nth-child(7){width:10%}
+      .detalle-table col:nth-child(8){width:9%}
+      .detalle-table col:nth-child(9){width:8%}
+    }
+  </style>
+<link rel="stylesheet" href="zima-brand.css">
+  <link rel="stylesheet" href="zima-seasonal.css">
+</head>
+<body class="reports-page">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-logo"><img src="logo-zima.png" alt="ZIMA"></div>
+        <div class="brand-copy"><strong>ZIMA 360</strong><span>GESTION DE PLANILLAS</span></div>
+      </div>
+      <div class="branch-card">
+        <div class="branch-label">Peaje activo</div>
+        <div class="branch-name" id="sidebarPeaje">Administracion central</div>
+      </div>
+      <nav class="main-nav" aria-label="Navegacion principal">
+        <div class="nav-title">MENU PRINCIPAL</div>
+        <a class="nav-item" href="dashboard.html"><span class="nav-icon"><i data-lucide="layout-dashboard"></i></span><span>Inicio</span></a>
+        <a class="nav-item" href="planilla.html"><span class="nav-icon"><i data-lucide="file-plus-2"></i></span><span>Nueva planilla</span></a>
+        <a class="nav-item" href="historial.html"><span class="nav-icon"><i data-lucide="history"></i></span><span>Historial</span></a>
+        <a class="nav-item active" href="informes.html"><span class="nav-icon"><i data-lucide="bar-chart-3"></i></span><span>Informes</span></a>
+        <a class="nav-item" href="soporte.html"><span class="nav-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13v-2a8 8 0 0 1 16 0v2M4 12H3v6h4v-6H4Zm16 0h1v6h-4v-6h3Zm0 6v1a2 2 0 0 1-2 2h-4M10 21h4"/></svg></span><span>ZimaTicket</span></a>
+        <a class="nav-item admin-only" href="granadmin.html" style="display:none"><span class="nav-icon"><i data-lucide="shield"></i></span><span>Gran admin</span></a>
+      </nav>
+      <div class="sidebar-bottom"><div class="menu-edition"><span class="menu-country"><span class="menu-colombia-flag" role="img" aria-label="Bandera de Colombia"></span>Hecho en Colombia</span><span class="menu-version">v2.0.0</span></div></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="breadcrumb"><b>Informes</b> / Recaudo mensual</div>
+        <div class="session-user">
+          <div class="status"><span class="dot"></span><span id="syncLabel">Conectando...</span></div>
+          <button class="avatar profile-trigger" id="avatar" type="button" title="Ver perfil" aria-label="Ver perfil">ZU</button>
+          <div class="user-meta"><strong id="headerUser">Usuario ZIMA</strong><span id="headerPeaje">Administracion central</span></div>
+          <button class="icon-btn zima-logout-button" type="button" title="Cerrar sesion" aria-label="Cerrar sesion" onclick="cerrarSesion()"><i data-lucide="log-out"></i></button>
+        </div>
+      </header>
+
+      <div class="page">
+        <section class="hero">
+          <div>
+            <div class="kicker">INFORME MENSUAL</div>
+            <h1>Recaudo desglosado</h1>
+            <p id="periodoTexto">Consulta de montos recaudados por mes, peaje y estado.</p>
+          </div>
+          <div class="actions">
+            <input class="field" id="mes" type="month">
+            <button class="btn primary" id="refreshBtn" type="button" onclick="cargar()"><i data-lucide="refresh-cw"></i> Actualizar</button>
+            <button class="btn" type="button" onclick="exportarCSV()"><i data-lucide="download"></i> CSV</button>
+            <button class="btn gold" type="button" onclick="window.print()"><i data-lucide="printer"></i> Imprimir</button>
+          </div>
+        </section>
+
+        <div id="msg"></div>
+
+        <section class="print-cover" aria-hidden="true">
+          <div class="print-head">
+            <div class="print-logo"><img src="logo-zima.png" alt="ZIMA"></div>
+            <div class="print-title">
+              <strong>INFORME MENSUAL DE RECAUDO</strong>
+              <span>Montos recaudados y valores declarados por planilla</span>
+            </div>
+            <div class="print-code">ZIMA 360<br><span id="printPeriodo">--</span></div>
+          </div>
+          <div class="print-meta">
+            <div><span>Periodo</span><strong id="printPeriodoMeta">--</strong></div>
+            <div><span>Generado por</span><strong id="printUsuario">Usuario ZIMA</strong></div>
+            <div><span>Fecha generacion</span><strong id="printFecha">--</strong></div>
+          </div>
+          <div class="print-summary">
+            <div><span>Total recaudado</span><strong id="pTotal">$ 0</strong></div>
+            <div><span>Valor en tula</span><strong id="pTula">$ 0</strong></div>
+            <div><span>Planillas</span><strong id="pPlanillas">0</strong></div>
+            <div><span>Entregadas</span><strong id="pEntregadas">0</strong></div>
+          </div>
+        </section>
+
+        <section class="metrics">
+          <article class="metric"><span>Total recaudado</span><strong id="mTotal">$ 0</strong></article>
+          <article class="metric"><span>Valor en tula</span><strong id="mTula">$ 0</strong></article>
+          <article class="metric"><span>Planillas</span><strong id="mPlanillas">0</strong></article>
+          <article class="metric"><span>Entregadas</span><strong id="mEntregadas">0</strong></article>
+        </section>
+
+        <section class="grid">
+          <div class="panel">
+            <div class="panel-head"><strong>Desglose por peaje</strong><span id="countPeajes">0 peajes</span></div>
+            <div class="table-wrap">
+              <table class="report-table peajes-table">
+                <colgroup><col><col><col><col><col><col><col></colgroup>
+                <thead><tr><th>Peaje</th><th>Planillas</th><th>Total</th><th>Tula</th><th>Billetes</th><th>Entregadas</th><th>Cerradas</th></tr></thead>
+                <tbody id="tablaPeajes"><tr><td colspan="7" class="empty">Sin datos para el mes seleccionado.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><strong>Desglose por estado</strong><span id="countEstados">0 estados</span></div>
+            <div class="table-wrap">
+              <table class="report-table estados-table">
+                <colgroup><col><col><col></colgroup>
+                <thead><tr><th>Estado</th><th>Planillas</th><th>Total</th></tr></thead>
+                <tbody id="tablaEstados"><tr><td colspan="3" class="empty">Sin datos.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" style="margin-top:18px">
+          <div class="panel-head"><strong>Detalle del mes</strong><span id="countDetalle">0 registros</span></div>
+          <div class="table-wrap">
+            <table class="report-table detalle-table">
+              <colgroup><col><col><col><col><col><col><col><col><col></colgroup>
+              <thead><tr><th>Codigo</th><th>Fecha</th><th>Peaje</th><th>Entregado por</th><th>Recibe</th><th>Estado</th><th>Total</th><th>Tula</th><th>Billetes</th></tr></thead>
+              <tbody id="tablaDetalle"><tr><td colspan="9" class="empty">Cargando informe...</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer class="footer"><span>ZIMA 360</span><span>Informes de recaudo</span><span>&copy; 2026</span></footer>
+      </div>
+    </main>
+  </div>
+
+  <div class="profile-modal" id="profileModal" aria-hidden="true" onclick="cerrarPerfilDesdeFondo(event)">
+    <div class="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profileTitle" onclick="event.stopPropagation()">
+      <div class="profile-head">
+        <div>
+          <h2 id="profileTitle">Datos de perfil</h2>
+          <p>Consulta y actualiza tus datos cuando lo necesites.</p>
+        </div>
+        <button class="profile-close" id="profileClose" type="button" aria-label="Cerrar"><i data-lucide="x"></i></button>
+      </div>
+      <form class="profile-form" id="profileForm">
+        <div class="profile-field">
+          <label for="profileNombre">Nombre completo</label>
+          <input id="profileNombre" autocomplete="name" required>
+        </div>
+        <div class="profile-grid">
+          <div class="profile-field">
+            <label for="profileEmail">Correo</label>
+            <input id="profileEmail" type="email" autocomplete="email">
+          </div>
+          <div class="profile-field">
+            <label for="profileTelefono">Telefono</label>
+            <input id="profileTelefono" autocomplete="tel">
+          </div>
+        </div>
+        <div class="profile-field">
+          <label for="profileCargo">Cargo</label>
+          <input id="profileCargo" autocomplete="organization-title">
+        </div>
+        <div class="profile-photo-row">
+          <div class="profile-preview" id="profileFotoPreview">ZU</div>
+          <div class="profile-field">
+            <label for="profileFoto">Foto de perfil</label>
+            <input id="profileFoto" type="file" accept="image/*">
+          </div>
+        </div>
+        <div class="profile-error" id="profileError"></div>
+        <div class="profile-actions">
+          <button class="btn" id="profileCancel" type="button">Cerrar</button>
+          <button class="btn primary" id="profileSave" type="submit"><i data-lucide="save"></i> Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="zima-ui.js"></script>
+  <script>
+    const API_URL='https://script.google.com/macros/s/AKfycbxtUVnS29d-Oo976b6poyXAIxahCLK5tIgXkKBfa_g_zrEP_dCYWVac8XCy22w3_1xsJQ/exec';
+    try{localStorage.setItem('ZIMA_API_URL',API_URL);}catch(e){}
+    const $=id=>document.getElementById(id);
+    let allRows=[];
+    let monthRows=[];
+    let PROFILE_FOTO_DATA='';
+
+    function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+    function textoLimpio(v){return window.ZimaUI&&ZimaUI.fixMojibake?ZimaUI.fixMojibake(v):v;}
+    function money(v){const n=Number(v)||0;return '$ '+Math.round(n).toLocaleString('es-CO');}
+    function numberValue(v){if(typeof v==='number')return isFinite(v)?v:0;const s=String(v??'').replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.');const n=Number(s);return isFinite(n)?n:0;}
+    function normalizarEstado(v){const e=String(v||'').trim().toUpperCase();return e==='ENTREGADO'?'ENTREGADA':e;}
+    function fechaMes(v){if(!v)return '';const s=String(v);if(/^\d{4}-\d{2}/.test(s))return s.slice(0,7);const d=new Date(s);return isNaN(d.getTime())?'':String(d.getFullYear()).padStart(4,'0')+'-'+String(d.getMonth()+1).padStart(2,'0');}
+    function periodoLegible(ym){if(!ym)return '';const [y,m]=ym.split('-').map(Number);return new Date(y,m-1,1).toLocaleDateString('es-CO',{month:'long',year:'numeric'});}
+    function badge(estado){const e=normalizarEstado(estado)||'SIN ESTADO';return '<span class="badge '+e.toLowerCase()+'">'+esc(e)+'</span>';}
+
+    function leerSesionLocal(){
+      const keys=['ZIMA360_SESION','ZIMA_SESION','ZIMA_SESSION','ZIMA_USUARIO','usuarioSesion','usuario','ZIMA_USER'];
+      for(const storage of [localStorage,sessionStorage]){
+        for(const key of keys){
+          try{
+            const raw=storage.getItem(key);
+            if(!raw||raw==='ACTIVA')continue;
+            if(raw.trim().startsWith('{'))return JSON.parse(raw);
+            return {usuario:raw};
+          }catch(e){}
+        }
+      }
+      return {};
+    }
+
+    function tokenLocal(){
+      return localStorage.getItem('ZIMA_SESSION_TOKEN')||
+        localStorage.getItem('ZIMA360_SESSION_TOKEN')||
+        localStorage.getItem('ZIMA_TOKEN')||
+        sessionStorage.getItem('ZIMA_SESSION_TOKEN')||'';
+    }
+
+    function zimaSessionParams(){
+      const s=leerSesionLocal();
+      const token=s.token||s.sessionToken||s.sesion||tokenLocal();
+      return {usuario:s.usuario||s.username||s.user||'',rol:s.rol||s.role||'',peaje:s.peaje||s.office||'',token:token,sessionToken:token,sesion:token};
+    }
+
+    const SESSION=(()=>{
+      const s=leerSesionLocal();
+      return {
+        user:s.usuario||s.user||localStorage.getItem('ZIMA_USER')||'',
+        name:s.nombre||s.name||localStorage.getItem('ZIMA_USER_NAME')||s.usuario||'Usuario ZIMA',
+        role:String(s.rol||s.role||localStorage.getItem('ZIMA_ROL')||'PEAJE').toUpperCase(),
+        peaje:s.peaje||s.office||localStorage.getItem('ZIMA_PEAJE')||'Administracion central',
+        foto:s.foto||s.FOTO||s.photo||localStorage.getItem('ZIMA360_FOTO')||'',
+        email:s.email||s.EMAIL||localStorage.getItem('ZIMA360_EMAIL')||'',
+        telefono:s.telefono||s.TELEFONO||localStorage.getItem('ZIMA360_TELEFONO')||'',
+        cargo:s.cargo||s.CARGO||localStorage.getItem('ZIMA360_CARGO')||'',
+        token:s.token||s.sessionToken||tokenLocal()
+      };
+    })();
+
+    function onlineRun(fn,arg){
+      return new Promise((resolve,reject)=>{
+        try{
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e=>reject(new Error(e&&e.message||String(e))))[fn](arg);
+        }catch(e){reject(e);}
+      });
+    }
+
+    function jsonp(params={}){
+      return new Promise((resolve,reject)=>{
+        const cb='__zima_informes_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+        const script=document.createElement('script');
+        const q=new URLSearchParams({...params,callback:cb});
+        const timer=setTimeout(()=>{cleanup();reject(new Error('Tiempo agotado al conectar.'));},25000);
+        function cleanup(){clearTimeout(timer);try{delete window[cb];}catch(e){window[cb]=undefined;}script.remove();}
+        window[cb]=data=>{cleanup();resolve(data);};
+        script.onerror=()=>{cleanup();reject(new Error('No fue posible consultar el Web App.'));};
+        script.src=API_URL+'?'+q.toString();
+        document.head.appendChild(script);
+      });
+    }
+
+    async function apiGet(action,params={}){
+      const payload={action,...zimaSessionParams(),...params};
+      if(window.google&&google.script&&google.script.run)return onlineRun('apiGet',payload);
+      try{
+        const r=await fetch(API_URL+'?'+new URLSearchParams(payload),{method:'GET',redirect:'follow',cache:'no-store',headers:{Accept:'application/json'}});
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        return JSON.parse(await r.text());
+      }catch(e){
+        return jsonp(payload);
+      }
+    }
+
+    async function apiPost(action,params={}){
+      const payload={action,...zimaSessionParams(),...params};
+      if(window.google&&google.script&&google.script.run)return onlineRun('apiPost',payload);
+      try{
+        const r=await fetch(API_URL,{method:'POST',redirect:'follow',cache:'no-store',headers:{'Content-Type':'text/plain;charset=utf-8',Accept:'application/json'},body:JSON.stringify(payload)});
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        const data=JSON.parse(await r.text());
+        if(data&&data.ok===false)throw new Error(data.error||data.mensaje||'El servidor rechazo la operacion.');
+        return data;
+      }catch(e){
+        if(JSON.stringify(payload).length>6000){
+          await postViaHiddenForm(payload);
+          return {ok:true,nombre:payload.nombre,email:payload.email,telefono:payload.telefono,cargo:payload.cargo,foto:payload.foto};
+        }
+        const data=await jsonp(payload);
+        if(data&&data.ok===false)throw new Error(data.error||data.mensaje||'El servidor rechazo la operacion.');
+        return data;
+      }
+    }
+
+    function postViaHiddenForm(payload){
+      return new Promise(resolve=>{
+        const iframe=document.createElement('iframe');
+        const form=document.createElement('form');
+        const name='zimaPerfilPost_'+Date.now();
+        let done=false;
+        function finish(){if(done)return;done=true;setTimeout(()=>{form.remove();iframe.remove();},700);resolve({ok:true});}
+        iframe.name=name;
+        iframe.style.display='none';
+        iframe.onload=finish;
+        form.method='POST';
+        form.action=API_URL;
+        form.target=name;
+        form.style.display='none';
+        Object.keys(payload).forEach(key=>{
+          const input=document.createElement('input');
+          input.type='hidden';
+          input.name=key;
+          input.value=payload[key]==null?'':String(payload[key]);
+          form.appendChild(input);
+        });
+        document.body.appendChild(iframe);
+        document.body.appendChild(form);
+        form.submit();
+        setTimeout(finish,8000);
+      });
+    }
+
+    function setupSession(){
+      $('headerUser').textContent=textoLimpio(SESSION.name);
+      $('headerPeaje').textContent=textoLimpio(SESSION.peaje);
+      $('sidebarPeaje').textContent=textoLimpio(SESSION.peaje);
+      $('printUsuario').textContent=textoLimpio(SESSION.name);
+      pintarAvatar($('avatar'),SESSION.foto,SESSION.name||SESSION.user);
+      const peaje=String(SESSION.peaje||'').trim().toUpperCase();
+      const peajeGlobal=!peaje||peaje==='TODOS'||peaje==='ADMINISTRACION CENTRAL'||peaje==='ADMINISTRACI\u00d3N CENTRAL';
+      document.querySelectorAll('.admin-only').forEach(el=>{el.style.display=(['ADMIN','ADMINISTRADOR'].includes(SESSION.role)&&peajeGlobal)?'flex':'none';});
+    }
+
+    function iniciales(nombre){
+      const partes=String(nombre||'Usuario ZIMA').trim().split(/\s+/).filter(Boolean);
+      return partes.length?partes.slice(0,2).map(x=>x.charAt(0).toUpperCase()).join(''):'ZU';
+    }
+
+    function pintarAvatar(el,foto,nombre){
+      if(!el)return;
+      const src=String(foto||'').trim();
+      const esFuenteImagen=/^(data:image\/|https?:\/\/|blob:)/i.test(src);
+      if(src&&esFuenteImagen){
+        el.innerHTML='<img src="'+esc(src)+'" alt="'+esc(nombre||'Usuario')+'">';
+        const image=el.querySelector('img');
+        if(image)image.addEventListener('error',function(){ el.textContent=iniciales(nombre); },{once:true});
+      }else{
+        el.textContent=iniciales(nombre);
+      }
+    }
+
+    function guardarPerfilSesion(perfil){
+      perfil=perfil||{};
+      const foto=String(perfil.foto||perfil.FOTO||perfil.photo||'').trim();
+      if(perfil.nombre)SESSION.name=perfil.nombre;
+      if(perfil.rol)SESSION.role=String(perfil.rol).toUpperCase();
+      if(perfil.peaje)SESSION.peaje=perfil.peaje;
+      SESSION.email=String(perfil.email||perfil.EMAIL||SESSION.email||'').trim();
+      SESSION.telefono=String(perfil.telefono||perfil.TELEFONO||SESSION.telefono||'').trim();
+      SESSION.cargo=String(perfil.cargo||perfil.CARGO||SESSION.cargo||'').trim();
+      SESSION.foto=foto;
+      try{
+        localStorage.setItem('ZIMA_USER_NAME',SESSION.name||'');
+        localStorage.setItem('ZIMA360_EMAIL',SESSION.email||'');
+        localStorage.setItem('ZIMA360_TELEFONO',SESSION.telefono||'');
+        localStorage.setItem('ZIMA360_CARGO',SESSION.cargo||'');
+        localStorage.setItem('ZIMA360_FOTO',SESSION.foto||'');
+      }catch(e){}
+      setupSession();
+    }
+
+    function abrirPerfil(){
+      const modal=$('profileModal');
+      if(!modal)return;
+      $('profileNombre').value=SESSION.name||SESSION.user||'';
+      $('profileEmail').value=SESSION.email||'';
+      $('profileTelefono').value=SESSION.telefono||'';
+      $('profileCargo').value=SESSION.cargo||'';
+      PROFILE_FOTO_DATA=SESSION.foto||'';
+      $('profileFoto').value='';
+      $('profileError').textContent='';
+      pintarAvatar($('profileFotoPreview'),PROFILE_FOTO_DATA,SESSION.name||SESSION.user);
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden','false');
+      setTimeout(()=>$('profileNombre').focus(),0);
+    }
+
+    function cerrarPerfil(){
+      const modal=$('profileModal');
+      if(!modal)return;
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden','true');
+    }
+
+    function cerrarPerfilDesdeFondo(event){
+      if(event.target&&event.target.id==='profileModal')cerrarPerfil();
+    }
+
+    function leerFotoPerfil(file){
+      return new Promise((resolve,reject)=>{
+        if(!file){resolve(PROFILE_FOTO_DATA||'');return;}
+        if(!/^image\//.test(file.type||'')){reject(new Error('Seleccione una imagen valida.'));return;}
+        if(file.size>6*1024*1024){reject(new Error('La foto no debe pesar mas de 6 MB.'));return;}
+        const reader=new FileReader();
+        reader.onerror=()=>reject(new Error('No fue posible leer la foto.'));
+        reader.onload=()=>{
+          const img=new Image();
+          img.onerror=()=>reject(new Error('No fue posible procesar la foto.'));
+          img.onload=()=>{
+            function render(max,quality){
+              const scale=Math.min(1,max/Math.max(img.width,img.height));
+              const canvas=document.createElement('canvas');
+              canvas.width=Math.max(1,Math.round(img.width*scale));
+              canvas.height=Math.max(1,Math.round(img.height*scale));
+              canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+              return canvas.toDataURL('image/jpeg',quality);
+            }
+            let data=render(320,.76);
+            if(data.length>45000)data=render(240,.68);
+            if(data.length>45000)data=render(180,.6);
+            if(data.length>49000){reject(new Error('La foto sigue muy pesada. Pruebe con otra imagen.'));return;}
+            resolve(data);
+          };
+          img.src=String(reader.result||'');
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function setupPerfil(){
+      const avatar=$('avatar');
+      const close=$('profileClose');
+      const cancel=$('profileCancel');
+      const foto=$('profileFoto');
+      const form=$('profileForm');
+      if(avatar)avatar.addEventListener('click',abrirPerfil);
+      if(avatar)avatar.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();abrirPerfil();}});
+      if(close)close.addEventListener('click',cerrarPerfil);
+      if(cancel)cancel.addEventListener('click',cerrarPerfil);
+      document.addEventListener('keydown',event=>{if(event.key==='Escape')cerrarPerfil();});
+      if(foto)foto.addEventListener('change',async()=>{
+        try{
+          $('profileError').textContent='';
+          PROFILE_FOTO_DATA=await leerFotoPerfil(foto.files&&foto.files[0]);
+          pintarAvatar($('profileFotoPreview'),PROFILE_FOTO_DATA,$('profileNombre').value||SESSION.name||SESSION.user);
+        }catch(error){
+          foto.value='';
+          $('profileError').textContent=error.message||'No fue posible cargar la foto.';
+        }
+      });
+      if(form)form.addEventListener('submit',async event=>{
+        event.preventDefault();
+        const save=$('profileSave');
+        try{
+          PROFILE_FOTO_DATA=await leerFotoPerfil($('profileFoto').files&&$('profileFoto').files[0]);
+        }catch(error){
+          $('profileError').textContent=error.message||'No fue posible cargar la foto.';
+          return;
+        }
+        const payload={
+          token:SESSION.token||tokenLocal(),
+          nombre:$('profileNombre').value.trim(),
+          email:$('profileEmail').value.trim(),
+          telefono:$('profileTelefono').value.trim(),
+          cargo:$('profileCargo').value.trim(),
+          foto:PROFILE_FOTO_DATA
+        };
+        if(!payload.nombre){$('profileError').textContent='El nombre es obligatorio.';return;}
+        try{
+          $('profileError').textContent='';
+          save.disabled=true;
+          const perfil=await apiPost('actualizarperfil',payload);
+          guardarPerfilSesion({...payload,...perfil});
+          cerrarPerfil();
+        }catch(error){
+          $('profileError').textContent=error.message||'No fue posible guardar el perfil.';
+        }finally{
+          save.disabled=false;
+        }
+      });
+    }
+
+    async function refrescarPerfil(){
+      try{
+        const perfil=await apiGet('perfil');
+        if(perfil&&perfil.ok!==false)guardarPerfilSesion(perfil);
+      }catch(e){}
+    }
+
+    function agrupar(rows,campo){
+      const map={};
+      rows.forEach(r=>{
+        const key=campo==='estado'?(normalizarEstado(r.estado)||'SIN ESTADO'):(String(r[campo]||'Sin dato').trim()||'Sin dato');
+        if(!map[key])map[key]={key,planillas:0,total:0,tula:0,billetes:0,entregadas:0,cerradas:0};
+        map[key].planillas++;
+        map[key].total+=numberValue(r.total);
+        map[key].tula+=numberValue(r.tula);
+        map[key].billetes+=numberValue(r.billetes);
+        if(normalizarEstado(r.estado)==='ENTREGADA')map[key].entregadas++;
+        if(normalizarEstado(r.estado)==='CERRADA')map[key].cerradas++;
+      });
+      return Object.values(map).sort((a,b)=>b.total-a.total||a.key.localeCompare(b.key));
+    }
+
+    function render(){
+      const ym=$('mes').value;
+      monthRows=allRows.filter(r=>fechaMes(r.fecha)===ym&&normalizarEstado(r.estado)!=='ANULADA');
+      const total=monthRows.reduce((s,r)=>s+numberValue(r.total),0);
+      const tula=monthRows.reduce((s,r)=>s+numberValue(r.tula),0);
+      const entregadas=monthRows.filter(r=>normalizarEstado(r.estado)==='ENTREGADA').length;
+      const periodo=periodoLegible(ym);
+      $('periodoTexto').textContent='Informe de '+periodo+'. Montos recaudados y declarados por planilla.';
+      $('mTotal').textContent=money(total);
+      $('mTula').textContent=money(tula);
+      $('mPlanillas').textContent=monthRows.length;
+      $('mEntregadas').textContent=entregadas;
+      $('printPeriodo').textContent=ym;
+      $('printPeriodoMeta').textContent=periodo;
+      const fechaGeneracion=new Date().toLocaleString('es-CO');
+      $('printFecha').textContent=fechaGeneracion;
+      document.querySelector('.print-code').setAttribute('data-generated',fechaGeneracion);
+      $('pTotal').textContent=money(total);
+      $('pTula').textContent=money(tula);
+      $('pPlanillas').textContent=monthRows.length;
+      $('pEntregadas').textContent=entregadas;
+
+      const peajes=agrupar(monthRows,'peaje');
+      $('countPeajes').textContent=peajes.length+' peajes';
+      $('tablaPeajes').innerHTML=peajes.length?peajes.map(p=>'<tr><td>'+esc(p.key)+'</td><td>'+p.planillas+'</td><td class="money">'+money(p.total)+'</td><td class="money">'+money(p.tula)+'</td><td class="money">'+money(p.billetes)+'</td><td>'+p.entregadas+'</td><td>'+p.cerradas+'</td></tr>').join(''):'<tr><td colspan="7" class="empty">Sin datos para el mes seleccionado.</td></tr>';
+
+      const estados=agrupar(monthRows,'estado');
+      $('countEstados').textContent=estados.length+' estados';
+      $('tablaEstados').innerHTML=estados.length?estados.map(e=>'<tr><td>'+badge(e.key)+'</td><td>'+e.planillas+'</td><td class="money">'+money(e.total)+'</td></tr>').join(''):'<tr><td colspan="3" class="empty">Sin datos.</td></tr>';
+
+      const detalle=[...monthRows].sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
+      $('countDetalle').textContent=detalle.length+' registros';
+      $('tablaDetalle').innerHTML=detalle.length?detalle.map(r=>'<tr><td>'+esc(r.codigo||r.id||'')+'</td><td>'+esc(String(r.fecha||'').slice(0,10))+'</td><td>'+esc(r.peaje||'')+'</td><td>'+esc(r.entregadoNombre||'')+'</td><td>'+esc(r.recibe||'')+'</td><td>'+badge(r.estado)+'</td><td class="money">'+money(numberValue(r.total))+'</td><td class="money">'+money(numberValue(r.tula))+'</td><td class="money">'+money(numberValue(r.billetes))+'</td></tr>').join(''):'<tr><td colspan="9" class="empty">Sin datos para el mes seleccionado.</td></tr>';
+      if(window.ZimaUI&&ZimaUI.repairVisibleText)ZimaUI.repairVisibleText();
+    }
+
+    async function cargar(){
+      try{
+        $('syncLabel').textContent='Sincronizando...';
+        $('msg').innerHTML='<div class="notice">Consultando planillas registradas...</div>';
+        const data=await apiGet('list');
+        if(!data.ok)throw new Error(data.error||data.mensaje||'No se pudieron consultar las planillas.');
+        allRows=data.rows||[];
+        render();
+        $('msg').innerHTML='';
+        $('syncLabel').textContent='Conectado';
+      }catch(e){
+        $('syncLabel').textContent='Sin conexion';
+        $('msg').innerHTML='<div class="notice error">'+esc(e.message)+'</div>';
+        render();
+      }
+    }
+
+    function exportarCSV(){
+      const headers=['codigo','fecha','peaje','entregadoNombre','recibe','estado','total','tula','billetes'];
+      const lines=[headers.join(',')].concat(monthRows.map(r=>headers.map(h=>'"'+String(r[h]??'').replace(/"/g,'""')+'"').join(',')));
+      const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='informe-zima-'+$('mes').value+'.csv';
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }
+
+    function cerrarSesion(){
+      return ZimaUI.confirmLogout({
+        detail:(SESSION.name||SESSION.user||'Usuario ZIMA') + (SESSION.peaje ? ' - ' + SESSION.peaje : '')
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded',()=>{
+      const now=new Date();
+      $('mes').value=String(now.getFullYear()).padStart(4,'0')+'-'+String(now.getMonth()+1).padStart(2,'0');
+      setupSession();
+      setupPerfil();
+      $('mes').addEventListener('change',render);
+      refrescarPerfil();
+      cargar();
+      if(window.lucide)lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
