@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
@@ -1097,42 +1097,8 @@ body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
   @media(max-width:700px){body:has(.app-shell) .welcome-card{background-image:linear-gradient(110deg,#fff 0%,#edf4ff 100%)!important}}
 </style>
   <link rel="stylesheet" href="zima-seasonal.css">
-<style id="password-change-notice-style">
-  .password-deadline-banner{display:grid;grid-template-columns:42px 1fr auto;gap:13px;align-items:center;margin:0 0 16px;padding:14px 17px;border:1px solid #efd68e;border-left:4px solid #d6a51d;border-radius:13px;background:linear-gradient(100deg,#fff9e9,#fffdf7);box-shadow:0 5px 16px rgba(73,55,11,.06);color:#17365d}
-  .password-deadline-banner[hidden]{display:none}
-  .password-deadline-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:#ffedb4;color:#8a6500}
-  .password-deadline-icon svg{width:20px;height:20px}
-  .password-deadline-copy strong{display:block;margin-bottom:3px;font-size:12px;color:#18375f}
-  .password-deadline-copy span{display:block;color:#5e6d7d;font-size:11px;line-height:1.45}
-  .password-deadline-tag{padding:6px 9px;border-radius:999px;background:#fff0c2;color:#815d00;font-size:9px;font-weight:900;white-space:nowrap}
-  .password-deadline-banner.is-required{border-color:#efb7ae;border-left-color:#cc4939;background:linear-gradient(100deg,#fff0ed,#fffafa)}
-  .password-deadline-banner.is-required .password-deadline-icon{background:#ffe0da;color:#a43225}
-  .password-deadline-banner.is-required .password-deadline-tag{background:#ffe0da;color:#a43225}
-  @media(max-width:560px){.password-deadline-banner{grid-template-columns:38px 1fr;gap:10px;padding:12px}.password-deadline-tag{grid-column:2;justify-self:start}}
-  .notification-password{width:100%;padding:11px;border:1px solid #f0d58a;border-radius:11px;background:#fff9e9;color:#163154;text-align:left;font:inherit;cursor:pointer;transition:background .16s ease,border-color .16s ease}
-  .notification-password:hover{background:#fff3cf;border-color:#e5bd50}
-  .notification-password .notification-icon{background:#ffedb4;color:#8b6500}
-  .notification-password .notification-copy strong{color:#163154}
-  .notification-password .notification-copy span{color:#596b80}
-  .notification-password .notification-copy b{display:inline-block;margin-top:5px;color:#0d5598;font-size:9px}
-  .password-notice-backdrop{position:fixed;inset:0;z-index:1300;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(4,18,42,.64);backdrop-filter:blur(6px)}
-  .password-notice-backdrop.open{display:flex}
-  .password-notice-card{position:relative;width:min(480px,100%);padding:30px;border:1px solid #dbe6f2;border-radius:20px;background:linear-gradient(155deg,#fff,#f3f8ff);box-shadow:0 26px 75px rgba(0,12,35,.32);color:#173354;text-align:center}
-  .password-notice-close{position:absolute;top:13px;right:13px;width:34px;height:34px;border:1px solid #dce5ef;border-radius:50%;background:#fff;color:#52677f;font-size:21px;line-height:1;cursor:pointer}
-  .password-notice-icon{width:56px;height:56px;margin:2px auto 16px;display:grid;place-items:center;border-radius:17px;background:#fff0c2;color:#9a7000}
-  .password-notice-icon svg{width:27px;height:27px}
-  .password-notice-kicker{margin:0 0 8px;color:#a37300;font-size:10px;font-weight:900;letter-spacing:.13em;text-transform:uppercase}
-  .password-notice-card h2{margin:0;color:#0b3975;font-size:23px;line-height:1.2}
-  .password-notice-copy{margin:12px auto 0;max-width:390px;color:#52677f;font-size:13px;line-height:1.6}
-  .password-notice-date{display:grid;gap:4px;margin:18px 0;padding:13px;border:1px solid #f0d58a;border-radius:12px;background:#fff9e9}
-  .password-notice-date span{color:#8a6b20;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
-  .password-notice-date strong{color:#713f00;font-size:17px}
-  .password-notice-actions{display:flex;justify-content:center;gap:10px;margin-top:22px;flex-wrap:wrap}
-  .password-notice-actions button{min-height:42px;padding:0 16px;border:1px solid #d5e0ed;border-radius:10px;background:#fff;color:#304b6a;font-size:12px;font-weight:800;cursor:pointer}
-  .password-notice-actions .password-notice-change{border-color:#0d4e91;background:#0d4e91;color:#fff}
-  .password-notice-actions .password-notice-change:hover{background:#0a3e77}
-  @media(max-width:520px){.password-notice-card{padding:25px 20px 21px;border-radius:17px}.password-notice-card h2{font-size:20px}.password-notice-date strong{font-size:15px}}
 </style>
+  <script src="maintenance-redirect.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -1220,10 +1186,6 @@ body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
           </div>
         </section>
 
-        <section class="password-deadline-banner" id="passwordDeadlineBanner" role="status" aria-live="polite" hidden>
-          <span class="password-deadline-icon"><i data-lucide="key-round" aria-hidden="true"></i></span>
-          <span class="password-deadline-copy"><strong id="passwordBannerTitle">Aviso de seguridad</strong><span id="passwordBannerMessage"></span></span>
-          <span class="password-deadline-tag" id="passwordBannerTag"></span>
         </section>
 
         <div id="msg" aria-live="polite"></div>
@@ -1285,22 +1247,6 @@ body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
         <footer class="footer"><span>ZIMA 360</span><span>Plataforma de gesti&oacute;n y trazabilidad</span><span>&copy; 2026</span></footer>
       </div>
     </main>
-  </div>
-
-  <div class="password-notice-backdrop" id="passwordNoticeDialog" aria-hidden="true">
-    <section class="password-notice-card" role="alertdialog" aria-modal="true" aria-labelledby="passwordNoticeTitle" aria-describedby="passwordNoticeCopy">
-      <button class="password-notice-close" id="passwordNoticeClose" type="button" aria-label="Cerrar aviso">&times;</button>
-      <div class="password-notice-icon" aria-hidden="true"><i data-lucide="key-round"></i></div>
-      <p class="password-notice-kicker">Aviso de seguridad</p>
-      <h2 id="passwordNoticeTitle">Cambio de contraseÃ±a programado</h2>
-      <p class="password-notice-copy" id="passwordNoticeCopy">El 20 de noviembre de 2026 comenzarÃ¡ el cambio obligatorio de contraseÃ±a para todas las cuentas.</p>
-      <div class="password-notice-date"><span>Fecha lÃ­mite</span><strong>20 de noviembre de 2026</strong></div>
-      <p class="password-notice-copy">Al intentar ingresar desde esa fecha, el sistema te pedirÃ¡ crear una contraseÃ±a nueva antes de abrir el panel.</p>
-      <div class="password-notice-actions">
-        <button class="password-notice-change" id="passwordNoticeChange" type="button" hidden>Cerrar sesiÃ³n y cambiar</button>
-        <button id="passwordNoticeDismiss" type="button">Entendido</button>
-      </div>
-    </section>
   </div>
 
   <div class="zima-welcome-modal" id="zimaWelcomeModal" aria-hidden="true">
@@ -1373,7 +1319,7 @@ body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 
     /* Web App ACTUAL de ZIMA 360.
        Se fuerza esta URL para evitar que el navegador reutilice una URL antigua guardada. */
-    const API_URL = 'https://script.google.com/macros/s/AKfycbwpnj0oxVgMlJ11jJ2GEn7x8mK5Zmk6SBOKxOGcGQOdTD7xnozdutzMUi2PhZgvB5sZWA/exec';
+    const API_URL = 'https://script.google.com/macros/s/AKfycbytJO1igD-o_rqZfgzNS0SSjaG60Jo31mVwkp9ENlXzS9p5j7IaoMpbWLSsuTWUQT5K7w/exec';
     try { localStorage.setItem('ZIMA_API_URL', API_URL); } catch(e) {}
 
     /* =========================================================
@@ -2001,77 +1947,13 @@ body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
       const list=document.getElementById('notificationList');
       if(!list) return;
       const rows=Array.isArray(data)?data:[];
-      const cambioObligatorio=Date.now()>=Date.UTC(2026,10,20,5,0,0);
-      const banner=document.getElementById('passwordDeadlineBanner');
-      if(banner){
-        const diasRestantes=Math.max(0,Math.ceil((Date.UTC(2026,10,20,5,0,0)-Date.now())/86400000));
-        banner.hidden=false;
-        banner.classList.toggle('is-required',cambioObligatorio);
-        setText('passwordBannerTitle',cambioObligatorio?'Cambio obligatorio de contraseña':'Aviso de renovación de contraseña');
-        setText('passwordBannerMessage',cambioObligatorio
-          ? 'Debes actualizar tu contraseña para continuar usando ZIMA 360. Al iniciar sesión, el sistema te pedirá el cambio antes de abrir el panel.'
-          : 'Desde el 20 de noviembre de 2026 el cambio será obligatorio. Faltan '+diasRestantes+' días; ten presente esta fecha.');
-        setText('passwordBannerTag',cambioObligatorio?'REQUERIDO':'20 NOV 2026');
-      }
-      const aviso=cambioObligatorio
-        ? 'El cambio es obligatorio desde hoy. Cierra sesiÃ³n y actualiza tu contraseÃ±a para continuar.'
-        : 'Renueva tu contraseÃ±a antes del 20 de noviembre de 2026. Desde esa fecha el cambio serÃ¡ obligatorio.';
-      setText('notificationStatus', cambioObligatorio ? 'Obligatorio' : 'Aviso importante');
-      list.innerHTML=`<button class="notification-item notification-password" id="passwordChangeNotice" type="button" aria-haspopup="dialog">
-        <span class="notification-icon"><i data-lucide="key-round" aria-hidden="true"></i></span>
-        <span class="notification-copy"><strong>${cambioObligatorio?'Cambio obligatorio de contraseÃ±a':'RenovaciÃ³n de contraseÃ±a'}</strong><span>${esc(aviso)} <b>Ver aviso</b></span></span>
-      </button>`;
-      const passwordNotice=document.getElementById('passwordChangeNotice');
-      if(passwordNotice) passwordNotice.addEventListener('click',abrirAvisoCambioClave);
+      list.innerHTML='<div class="notification-empty">No tienes notificaciones nuevas.</div>';
+      setText('notificationStatus','Sin avisos');
       if(window.ZimaUpdates && (status==='Actualizado' || status==='Conectado')) ZimaUpdates.observe(rows);
       if(window.lucide && typeof lucide.createIcons === 'function'){
         lucide.createIcons({attrs:{"stroke-width":1.9}});
       }
     }
-
-    function abrirAvisoCambioClave(){
-      const dialog=document.getElementById('passwordNoticeDialog');
-      if(!dialog) return;
-      const obligatorio=Date.now()>=Date.UTC(2026,10,20,5,0,0);
-      if(obligatorio){
-        setText('passwordNoticeTitle','Debes cambiar tu contraseÃ±a');
-        setText('passwordNoticeCopy','El cambio obligatorio de contraseÃ±a ya estÃ¡ vigente. Para continuar usando ZIMA 360, cierra sesiÃ³n y actualÃ­zala al volver a ingresar.');
-        setText('passwordNoticeChange','Cerrar sesiÃ³n y cambiar');
-        document.getElementById('passwordNoticeChange').hidden=false;
-      }
-      const panel=document.getElementById('notificationPanel');
-      const bell=document.getElementById('notificationButton');
-      if(panel) panel.classList.remove('open');
-      if(bell) bell.setAttribute('aria-expanded','false');
-      dialog.classList.add('open');
-      dialog.setAttribute('aria-hidden','false');
-      document.body.style.overflow='hidden';
-      const close=document.getElementById('passwordNoticeClose');
-      if(close) close.focus();
-      if(window.lucide && typeof lucide.createIcons==='function') lucide.createIcons({attrs:{"stroke-width":1.9}});
-    }
-
-    function cerrarAvisoCambioClave(){
-      const dialog=document.getElementById('passwordNoticeDialog');
-      if(!dialog || !dialog.classList.contains('open')) return;
-      dialog.classList.remove('open');
-      dialog.setAttribute('aria-hidden','true');
-      document.body.style.overflow='';
-    }
-
-    document.getElementById('passwordNoticeClose').addEventListener('click',cerrarAvisoCambioClave);
-    document.getElementById('passwordNoticeDismiss').addEventListener('click',cerrarAvisoCambioClave);
-    document.getElementById('passwordNoticeChange').addEventListener('click',function(){
-      cerrarAvisoCambioClave();
-      cerrarSesion();
-    });
-    document.getElementById('passwordNoticeDialog').addEventListener('click',function(event){
-      if(event.target===this) cerrarAvisoCambioClave();
-    });
-    document.addEventListener('keydown',function(event){
-      if(event.key==='Escape') cerrarAvisoCambioClave();
-    });
-
     function setupNotifications(){
       const button=document.getElementById('notificationButton');
       const panel=document.getElementById('notificationPanel');
